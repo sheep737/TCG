@@ -2,170 +2,39 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>Dodge Game (Full Mobile Version)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TCG Battle</title>
 
-<!-- iPhoneズーム防止（ダブルタップ・ピンチ無効） -->
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
 <style>
-    body {
-        background: #222;
-        margin: 0;
-        overflow: hidden;
-        touch-action: none;
-        -webkit-user-select: none;
-        user-select: none;
-    }
-    #gameArea {
-        position: absolute;
-        width: 100vw;
-        height: 100vh;
-        background: #333;
-        overflow: hidden;
-    }
-
-    /* 画面に合わせてサイズ可変 */
-    .player, .enemy {
-        position: absolute;
-        width: 10vw;
-        height: 10vw;
-        max-width: 60px;
-        max-height: 60px;
-    }
-
-    .player {
-        background: #4af;
-        bottom: 5vh;
-        left: 45vw;
-    }
-
-    .enemy {
-        background: #f44;
-        top: -10vw;
-    }
-
-    #score {
-        position: absolute;
-        top: 2vw;
-        left: 2vw;
-        font-size: 6vw;
-        color: #fff;
-    }
-
-    /* スマホ操作ボタン */
-    #controls {
-        position: absolute;
-        bottom: 0;
-        width: 100%;
-        height: 20vh;
-        display: flex;
-    }
-    .btn {
-        flex: 1;
-        background: rgba(255,255,255,0.15);
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        font-size: 10vw;
-        color: #fff;
-    }
-    .btn:active {
-        background: rgba(255,255,255,0.35);
-    }
+body{background:#222;color:#fff;text-align:center}
+.card{width:80px;height:120px;background:#444;border-radius:8px;margin:5px;display:inline-block}
+.selected{outline:3px solid gold}
 </style>
 </head>
 <body>
 
-<div id="gameArea">
-    <div id="score">Score: 0</div>
-    <div class="player" id="player"></div>
+<h3 id="status"></h3>
+<p>HP:<span id="hp"></span> マナ:<span id="mana"></span></p>
 
-    <div id="controls">
-        <div class="btn" id="leftBtn">◀</div>
-        <div class="btn" id="rightBtn">▶</div>
-    </div>
+<h4>相手フィールド</h4>
+<div id="enemyField"></div>
+
+<h4>自分フィールド</h4>
+<div id="myField"></div>
+
+<h4>手札</h4>
+<div id="hand"></div>
+
+<button onclick="endTurn()">ターン終了</button>
+
+<div id="result" style="display:none;position:fixed;inset:0;background:#000c">
+  <h1 id="resultText"></h1>
+  <button onclick="rematch()">再戦</button>
 </div>
 
-<script>
-/* --- iPhoneのダブルタップズームを完全無効化 --- */
-let lastTouchEnd = 0;
-document.addEventListener('touchend', function (event) {
-    const now = new Date().getTime();
-    if (now - lastTouchEnd <= 300) {
-        event.preventDefault();
-    }
-    lastTouchEnd = now;
-}, false);
-
-/* --- ゲーム処理 --- */
-const gameArea = document.getElementById("gameArea");
-const player = document.getElementById("player");
-const scoreText = document.getElementById("score");
-
-let score = 0;
-let speed = 2;
-let moveLeft = false;
-let moveRight = false;
-
-// プレイヤーの位置(%)
-let playerX = 45;
-
-/* タッチ操作 */
-leftBtn.addEventListener("touchstart", () => moveLeft = true);
-leftBtn.addEventListener("touchend", () => moveLeft = false);
-
-rightBtn.addEventListener("touchstart", () => moveRight = true);
-rightBtn.addEventListener("touchend", () => moveRight = false);
-
-/* 敵生成 */
-function createEnemy() {
-    const enemy = document.createElement("div");
-    enemy.classList.add("enemy");
-    enemy.style.left = Math.random() * 90 + "vw";
-    enemy.dataset.speed = 2 + Math.random() * 3;
-    gameArea.appendChild(enemy);
-}
-
-/* ゲームループ */
-function gameLoop() {
-
-    // プレイヤー移動
-    if (moveLeft)  playerX -= 1.5;
-    if (moveRight) playerX += 1.5;
-
-    playerX = Math.max(0, Math.min(90, playerX));
-    player.style.left = playerX + "vw";
-
-    // 敵の移動
-    const enemies = document.querySelectorAll(".enemy");
-    enemies.forEach(enemy => {
-        const y = enemy.offsetTop + Number(enemy.dataset.speed) + speed * 0.2;
-        enemy.style.top = y + "px";
-
-        // 当たり判定
-        const p = player.getBoundingClientRect();
-        const e = enemy.getBoundingClientRect();
-        if (!(p.right < e.left || p.left > e.right || p.bottom < e.top || p.top > e.bottom)) {
-            alert("Game Over!\nScore: " + score);
-            location.reload();
-        }
-
-        if (y > window.innerHeight) enemy.remove();
-    });
-
-    // スコア
-    score++;
-    scoreText.innerText = "Score: " + score;
-
-    // 難易度上昇
-    if (score % 400 === 0) speed++;
-
-    requestAnimationFrame(gameLoop);
-}
-
-setInterval(createEnemy, 700);
-gameLoop();
-</script>
-
+<script src="game.js"></script>
 </body>
 </html>
