@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ver:3</title>
+<title>ver:4</title>
 
 <style>
   body {
@@ -56,7 +56,9 @@
 </head>
 
 <body>
-
+<div class="status">
+  相手の手札：<span id="opponentHandCount">0</span> 枚
+</div>
 <div class="status">
   デッキ残り：<span id="deckCount"></span> 枚
 </div>
@@ -64,8 +66,34 @@
 <button onclick="drawCard()">カードを引く</button>
 
 <div class="hand" id="hand"></div>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
 <script>
+  const firebaseConfig = {apiKey: "AIzaSyCzUHmyYcQlYkJmeXX5Cxp_fNFkonOSE3I",
+  authDomain: "tcgtk-51f73.firebaseapp.com",
+  databaseURL: "https://tcgtk-51f73-default-rtdb.firebaseio.com",
+  projectId: "tcgtk-51f73",
+  storageBucket: "tcgtk-51f73.firebasestorage.app",
+  messagingSenderId: "379251900306",
+  appId: "1:379251900306:web:beeb1989bedcca4dcbcb4b",
+  measurementId: "G-HH57WGJM15"
+  };
+
+  firebase.initializeApp(firebaseConfig);
+  const database = firebase.database();
+
+  // ★ 仮：この端末は player1
+const myPlayerId = "player1";
+const opponentPlayerId = "player2";
+
+  database
+  .ref("game/" + opponentPlayerId + "/handCount")
+  .on("value", snapshot => {
+    const count = snapshot.val() || 0;
+    document.getElementById("opponentHandCount").textContent = count;
+  });
+  
   let deck = [
     "スライム",
     "ドラゴン",
@@ -78,15 +106,21 @@
 
   update();
 
-  function drawCard() {
-    if (deck.length === 0) {
-      alert("デッキが空です");
-      return;
-    }
-
-    hand.push(deck.shift());
-    update();
+function drawCard() {
+  if (deck.length === 0) {
+    alert("デッキが空です");
+    return;
   }
+
+  hand.push(deck.shift());
+
+  // ★ 自分の手札枚数をFirebaseに保存
+  database
+    .ref("game/" + myPlayerId + "/handCount")
+    .set(hand.length);
+
+  update();
+}
 
   function update() {
     document.getElementById("deckCount").textContent = deck.length;
