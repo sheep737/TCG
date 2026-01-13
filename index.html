@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ver:1</title>
+
+<style>
+  body {
+    margin: 0;
+    padding: 16px;
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    background: #f0f0f0;
+  }
+
+  .status {
+    margin-bottom: 12px;
+    font-size: 16px;
+  }
+
+  button {
+    width: 100%;
+    height: 52px;
+    font-size: 18px;
+    border: none;
+    border-radius: 8px;
+    background: #007aff;
+    color: white;
+    margin-bottom: 16px;
+  }
+
+  button:active {
+    background: #005ecb;
+  }
+
+  .hand {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .card {
+    width: calc(50% - 4px);
+    background: white;
+    border-radius: 8px;
+    padding: 12px;
+    text-align: center;
+    font-size: 16px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  }
+</style>
+</head>
+
+<body>
+
+<div class="status">
+  デッキ残り：<span id="deckCount"></span> 枚
+</div>
+
+<button onclick="drawCard()">カードを引く</button>
+
+<div class="hand" id="hand"></div>
+
+<script>
+  // デッキ
+  let deck = [
+    "スライム",
+    "ドラゴン",
+    "ゴブリン",
+    "ナイト",
+    "ウィザード"
+  ];
+
+  let hand = [];
+
+  update();
+
+  function drawCard() {
+    if (deck.length === 0) {
+      alert("デッキが空です");
+      return;
+    }
+
+    const card = deck.shift();
+    hand.push(card);
+    update();
+  }
+
+  function update() {
+    document.getElementById("deckCount").textContent = deck.length;
+
+    const handDiv = document.getElementById("hand");
+    handDiv.innerHTML = "";
+
+    hand.forEach(name => {
+      const card = document.createElement("div");
+      card.className = "card";
+      card.textContent = name;
+      handDiv.appendChild(card);
+    });
+  }
+</script>
+
+</body>
+</html>
