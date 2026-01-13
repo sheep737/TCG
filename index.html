@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ver:1</title>
+<title>ver:2</title>
 
 <style>
   body {
@@ -48,6 +48,10 @@
     font-size: 16px;
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
   }
+
+  .card:active {
+    background: #e6f0ff;
+  }
 </style>
 </head>
 
@@ -62,7 +66,6 @@
 <div class="hand" id="hand"></div>
 
 <script>
-  // デッキ
   let deck = [
     "スライム",
     "ドラゴン",
@@ -81,8 +84,14 @@
       return;
     }
 
-    const card = deck.shift();
-    hand.push(card);
+    hand.push(deck.shift());
+    update();
+  }
+
+  // ★ 手札をデッキに戻す
+  function returnToDeck(index) {
+    const card = hand.splice(index, 1)[0];
+    deck.push(card);
     update();
   }
 
@@ -92,10 +101,14 @@
     const handDiv = document.getElementById("hand");
     handDiv.innerHTML = "";
 
-    hand.forEach(name => {
+    hand.forEach((name, index) => {
       const card = document.createElement("div");
       card.className = "card";
       card.textContent = name;
+
+      // ★ タップで戻す
+      card.onclick = () => returnToDeck(index);
+
       handDiv.appendChild(card);
     });
   }
