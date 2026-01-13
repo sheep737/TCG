@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ver:2</title>
+<title>ver:3</title>
 
 <style>
   body {
@@ -88,26 +88,16 @@
     update();
   }
 
-  // ★ 手札をデッキに戻す
-  function returnToDeck(index) {
-    const card = hand.splice(index, 1)[0];
-    deck.push(card);
-    update();
-  }
-
   function update() {
     document.getElementById("deckCount").textContent = deck.length;
 
     const handDiv = document.getElementById("hand");
     handDiv.innerHTML = "";
 
-    hand.forEach((name, index) => {
+    hand.forEach((name) => {
       const card = document.createElement("div");
       card.className = "card";
       card.textContent = name;
-
-      // ★ タップで戻す
-      card.onclick = () => returnToDeck(index);
 
       handDiv.appendChild(card);
     });
