@@ -3,150 +3,135 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ver:6</title>
+<title>ver:8 (順番決定機能付き)</title>
 
 <style>
-  body {
-    margin: 0;
-    padding: 16px;
-    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-    background: #f0f0f0;
-  }
-
-  .status {
-    margin-bottom: 12px;
-    font-size: 16px;
+  body { margin: 0; padding: 16px; font-family: sans-serif; background: #f0f0f0; }
+  .status { margin-bottom: 12px; font-size: 16px; }
+  
+  /* 順番決めエリアのスタイル */
+  #setup-area {
+    background: #fff; padding: 10px; border-radius: 8px;
+    margin-bottom: 15px; border: 1px solid #ccc; text-align: center;
   }
 
   button {
-    width: 100%;
-    height: 52px;
-    font-size: 18px;
-    border: none;
-    border-radius: 8px;
-    background: #007aff;
-    color: white;
-    margin-bottom: 16px;
+    width: 100%; height: 52px; font-size: 18px; border: none;
+    border-radius: 8px; background: #007aff; color: white; margin-bottom: 16px;
   }
+  button:active { background: #005ecb; }
+  button:disabled { background: #aaa; }
 
-  button:active {
-    background: #005ecb;
-  }
-
-  .hand {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-
+  .hand { display: flex; flex-wrap: wrap; gap: 8px; }
   .card {
-    width: calc(50% - 4px);
-    background: white;
-    border-radius: 8px;
-    padding: 12px;
-    text-align: center;
-    font-size: 16px;
+    width: calc(50% - 4px); background: white; border-radius: 8px;
+    padding: 12px; text-align: center; font-size: 16px;
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-  }
-
-  .card:active {
-    background: #e6f0ff;
   }
 </style>
 </head>
 
 <body>
+  <div id="setup-area">
+    <div id="order-text">先攻・後攻が決まっていません</div>
+    <button id="orderBtn" onclick="decideOrder()" style="margin-top:10px; background:#28a745;">順番を決める</button>
+  </div>
+
   <div class="status">
-  ルーム：<span id="roomId"></span> /
-  あなた：<span id="myPlayer"></span>
-</div>
-<div class="status">
-  相手の手札：<span id="opponentHandCount">0</span> 枚
-</div>
-<div class="status">
-  デッキ残り：<span id="deckCount"></span> 枚
-</div>
+    ルーム：<span id="roomId"></span> / あなた：<span id="myPlayer"></span>
+  </div>
+  <div class="status">
+    あなたの役割：<span id="myRole">判定中...</span>
+  </div>
+  <div class="status">
+    相手の手札：<span id="opponentHandCount">0</span> 枚
+  </div>
+  <div class="status">
+    デッキ残り：<span id="deckCount"></span> 枚
+  </div>
 
-<button onclick="drawCard()">カードを引く</button>
+  <button id="drawBtn" onclick="drawCard()" disabled>カードを引く</button>
 
-<div class="hand" id="hand"></div>
+  <div class="hand" id="hand"></div>
+
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
 <script>
-  const firebaseConfig = {apiKey: "AIzaSyCzUHmyYcQlYkJmeXX5Cxp_fNFkonOSE3I",
-  authDomain: "tcgtk-51f73.firebaseapp.com",
-  databaseURL: "https://tcgtk-51f73-default-rtdb.firebaseio.com",
-  projectId: "tcgtk-51f73",
-  storageBucket: "tcgtk-51f73.firebasestorage.app",
-  messagingSenderId: "379251900306",
-  appId: "1:379251900306:web:beeb1989bedcca4dcbcb4b",
-  measurementId: "G-HH57WGJM15"
+  const firebaseConfig = {
+    apiKey: "AIzaSyCzUHmyYcQlYkJmeXX5Cxp_fNFkonOSE3I",
+    authDomain: "tcgtk-51f73.firebaseapp.com",
+    databaseURL: "https://tcgtk-51f73-default-rtdb.firebaseio.com",
+    projectId: "tcgtk-51f73",
+    storageBucket: "tcgtk-51f73.firebasestorage.app",
+    messagingSenderId: "379251900306",
+    appId: "1:379251900306:web:beeb1989bedcca4dcbcb4b"
   };
 
   firebase.initializeApp(firebaseConfig);
   const database = firebase.database();
-const roomId = getQueryParam("room") || "room1";
-const myPlayerId = getQueryParam("player") || "player1";
-const opponentPlayerId =
-  myPlayerId === "player1" ? "player2" : "player1";
-database
-  .ref("games/" + roomId + "/" + opponentPlayerId + "/handCount")
-  .on("value", snapshot => {
+  const roomId = getQueryParam("room") || "room1";
+  const myPlayerId = getQueryParam("player") || "player1";
+  const opponentPlayerId = myPlayerId === "player1" ? "player2" : "player1";
+
+  document.getElementById("roomId").textContent = roomId;
+  document.getElementById("myPlayer").textContent = myPlayerId;
+
+  let deck = ["スライム", "ドラゴン", "ゴブリン", "ナイト", "ウィザード"];
+  let hand = [];
+
+  // --- 順番決定の同期処理 ---
+  database.ref("games/" + roomId + "/firstPlayer").on("value", snapshot => {
+    const firstPlayerId = snapshot.val();
+    if (firstPlayerId) {
+      const isFirst = (myPlayerId === firstPlayerId);
+      document.getElementById("myRole").textContent = isFirst ? "先攻" : "後攻";
+      document.getElementById("order-text").textContent = "順番が決定しました";
+      document.getElementById("orderBtn").style.display = "none"; // ボタンを消す
+      document.getElementById("drawBtn").disabled = false; // 引けるようにする
+    }
+  });
+
+  function decideOrder() {
+    const players = ["player1", "player2"];
+    const randomChoice = players[Math.floor(Math.random() * players.length)];
+    database.ref("games/" + roomId + "/firstPlayer").set(randomChoice);
+  }
+
+  // --- 既存の処理 ---
+  database.ref("games/" + roomId + "/" + opponentPlayerId + "/handCount").on("value", snapshot => {
     const count = snapshot.val() || 0;
     document.getElementById("opponentHandCount").textContent = count;
   });
 
-document.getElementById("roomId").textContent = roomId;
-document.getElementById("myPlayer").textContent = myPlayerId;
-  
-  let deck = [
-    "スライム",
-    "ドラゴン",
-    "ゴブリン",
-    "ナイト",
-    "ウィザード"
-  ];
-
-  let hand = [];
-
-  update();
-
-function getQueryParam(name) {
-  const params = new URLSearchParams(window.location.search);
-  return params.get(name);
-}
-  
-function drawCard() {
-  if (deck.length === 0) {
-    alert("デッキが空です");
-    return;
+  function getQueryParam(name) {
+    const params = new URLSearchParams(window.location.search);
+    return params.get(name);
   }
-
-  hand.push(deck.shift());
-
-  // ★ 自分の手札枚数をFirebaseに保存
-database
-  .ref("games/" + roomId + "/" + myPlayerId + "/handCount")
-  .set(hand.length);
-
-  update();
-}
+  
+  function drawCard() {
+    if (deck.length === 0) {
+      alert("デッキが空です");
+      return;
+    }
+    hand.push(deck.shift());
+    database.ref("games/" + roomId + "/" + myPlayerId + "/handCount").set(hand.length);
+    update();
+  }
 
   function update() {
     document.getElementById("deckCount").textContent = deck.length;
-
     const handDiv = document.getElementById("hand");
     handDiv.innerHTML = "";
-
     hand.forEach((name) => {
       const card = document.createElement("div");
       card.className = "card";
       card.textContent = name;
-
       handDiv.appendChild(card);
     });
   }
+
+  update();
 </script>
 
 </body>
