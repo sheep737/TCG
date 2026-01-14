@@ -3,12 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>TCG Integrated Master Ver.35</title>
+<title>TCG Master Ver.36</title>
 <style>
   :root { --primary: #007aff; --danger: #ff3b30; --success: #34c759; --warning: #ff9500; }
   body { margin: 0; padding: 16px; font-family: -apple-system, sans-serif; background: #f0f0f0; user-select: none; }
   
-  /* ヘッダー・情報表示 */
+  /* 情報表示 */
   .info-bar { background: #333; color: white; padding: 10px; border-radius: 8px; margin-bottom: 12px; font-size: 13px; line-height: 1.6; }
   .info-bar b { color: #5ac8fa; }
   .status { margin-bottom: 8px; font-size: 14px; text-align: center; height: 45px; }
@@ -23,22 +23,22 @@
   .deck-count { font-size: 24px; font-weight: bold; color: var(--danger); text-align: center; margin-bottom: 10px; }
 
   /* フィールド */
-  .field-container { display: flex; flex-direction: column; gap: 10px; background: #ddd; padding: 10px; border-radius: 8px; margin: 15px 0; min-height: 260px; border: 2px dashed #999; }
+  .field-container { display: flex; flex-direction: column; gap: 10px; background: #ddd; padding: 10px; border-radius: 8px; margin: 15px 0; min-height: 260px; border: 2px dashed #999; position: relative; }
   .field-side { display: flex; gap: 8px; justify-content: center; min-height: 115px; align-items: center; }
   
-  /* カードデザイン */
+  /* カード */
   .card { width: 85px; height: 115px; background: white; border-radius: 6px; padding: 6px; text-align: center; font-size: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); display: flex; flex-direction: column; border: 2px solid transparent; flex-shrink: 0; box-sizing: border-box; transition: 0.2s; }
   .card-name { font-weight: bold; height: 2.4em; overflow: hidden; line-height: 1.2; }
   .tag { font-size: 8px; padding: 1px 4px; border-radius: 3px; background: #eee; margin: 2px; display: inline-block; border: 0.5px solid #ccc; }
   .atk { color: var(--danger); font-weight: bold; font-size: 14px; margin-top: auto; }
   .atk::before { content: "ATK "; font-size: 9px; }
 
-  /* アクション状態 */
+  /* 状態表示 */
   .exhausted { opacity: 0.5; filter: grayscale(1); }
   .selected { border-color: var(--warning); box-shadow: 0 0 10px var(--warning); transform: translateY(-5px); }
   .targetable { border-color: var(--danger); animation: blink 0.8s infinite; }
   .sacrifice-target { border-color: var(--primary); animation: blink 0.8s infinite; cursor: pointer; }
-  .direct-target { background: var(--danger) !important; color: white; animation: blink 0.5s infinite; cursor: pointer; border-radius: 4px; padding: 2px; }
+  .direct-target { background: var(--danger) !important; color: white !important; animation: blink 0.5s infinite; cursor: pointer; border-radius: 4px; }
 
   @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
 
@@ -46,7 +46,6 @@
   button:disabled { background: #aaa; cursor: not-allowed; }
   #hand { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 10px; }
 
-  /* 終了画面 */
   .end-screen { position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); color:white; display:none; flex-direction:column; align-items:center; justify-content:center; z-index:100; }
 </style>
 </head>
@@ -56,7 +55,7 @@
     <h2>デッキ作成：<span id="editorPlayerName"></span></h2>
     <div class="deck-count">残り: <span id="deckRemain">18</span>枚</div>
     <div id="masterList" class="master-list"></div>
-    <button onclick="randomDeck()" style="background:var(--success)">おまかせで埋める</button>
+    <button onclick="randomDeck()" style="background:var(--success)">おまかせ作成</button>
     <button onclick="currentDeck=[]; updateEditorUI()" style="background:#8e8e93">クリア</button>
     <button id="saveDeckBtn" onclick="saveDeckToFirebase()" disabled>サーバーへ保存</button>
     <div id="savedMsg" style="text-align:center; color:var(--success); font-weight:bold; margin-top:5px;"></div>
@@ -65,12 +64,12 @@
   <div id="game-view">
     <div class="info-bar">
       <div>ROOM: <b id="displayRoomId">-</b></div>
-      <div>自分: <b id="displayMyName">-</b> (ダメージ: <span id="myDamage">0</span>/3)</div>
-      <div id="oppArea">相手: <b id="displayOppName">-</b> (ダメージ: <span id="oppDamage">0</span>/3)</div>
+      <div>自分: <b id="displayMyName">-</b> (被ダメージ: <span id="myDamage">0</span>/3)</div>
+      <div id="oppArea">相手: <b id="displayOppName">-</b> (被ダメージ: <span id="oppDamage">0</span>/3)</div>
     </div>
 
     <div id="setup-area">
-      <button onclick="startGameWithFirebase()" style="background:var(--success)">保存したデッキで対戦開始</button>
+      <button onclick="startGameSync()" style="background:var(--success)">対戦開始（全員のデッキを同期）</button>
     </div>
 
     <div class="status"><span id="currentTurnOwner">待機中</span></div>
@@ -95,7 +94,7 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
 <script>
-  // --- 共通設定 ---
+  // --- Firebase設定 ---
   const firebaseConfig = {
     apiKey: "AIzaSyCzUHmyYcQlYkJmeXX5Cxp_fNFkonOSE3I",
     authDomain: "tcgtk-51f73.firebaseapp.com",
@@ -122,7 +121,6 @@
     {n:"不死鳥", a:1000, t:["火", "特殊"]}, {n:"死神", a:700, t:["闇", "即死"]}
   ];
 
-  // --- 初期分岐 ---
   if (roomId) {
     document.getElementById("game-view").style.display = "block";
     initGameLogic();
@@ -131,7 +129,7 @@
     initEditorLogic();
   }
 
-  // --- デッキ編集画面の処理 ---
+  // --- デッキ編集 ---
   let currentDeck = [];
   function initEditorLogic() {
     document.getElementById("editorPlayerName").textContent = myPlayerId;
@@ -162,7 +160,7 @@
     });
   }
 
-  // --- 対戦画面の処理 ---
+  // --- 対戦ロジック ---
   let myHand=[], myField=[], oppField=[], isMyTurn=false, selectedIdx=null, sacrificeHandIdx=null, turnCount=0;
 
   function initGameLogic() {
@@ -178,7 +176,6 @@
       const me = data[myPlayerId] || {};
       const opp = data[opponentPlayerId] || {};
 
-      // 勝敗チェック
       if (me.damage >= 3) showEnd("DEFEAT...");
       else if (opp.damage >= 3) showEnd("YOU WIN!");
       else document.getElementById("end-screen").style.display = "none";
@@ -201,15 +198,27 @@
     });
   }
 
-  async function startGameWithFirebase() {
-    const s = await database.ref(`decks/${myPlayerId}`).get();
-    if (!s.exists()) return alert("デッキを保存してください");
-    const d = s.val().sort(() => Math.random() - 0.5);
-    database.ref(`games/${roomId}`).update({
-      currentTurn: "player1", turnCount: 1,
-      [myPlayerId]: { deck: d.splice(3), handList: d.splice(0, 3), field: [], damage: 0 },
-      [opponentPlayerId]: { damage: 0 } 
-    });
+  // ★修正：全員のデッキを同期して開始
+  async function startGameSync() {
+    const [mySnap, oppSnap] = await Promise.all([
+      database.ref(`decks/${myPlayerId}`).get(),
+      database.ref(`decks/${opponentPlayerId}`).get()
+    ]);
+
+    if (!mySnap.exists()) return alert("自分のデッキがありません。編集画面で保存してください。");
+    if (!oppSnap.exists()) return alert("相手のデッキがサーバーに見つかりません。");
+
+    const myD = mySnap.val().sort(() => Math.random() - 0.5);
+    const oppD = oppSnap.val().sort(() => Math.random() - 0.5);
+
+    const initialState = {
+      currentTurn: "player1",
+      turnCount: 1,
+      [myPlayerId]: { deck: myD.slice(3), handList: myD.slice(0, 3), field: [], damage: 0 },
+      [opponentPlayerId]: { deck: oppD.slice(3), handList: oppD.slice(0, 3), field: [], damage: 0 }
+    };
+
+    database.ref(`games/${roomId}`).set(initialState);
   }
 
   function autoDraw() {
@@ -294,11 +303,14 @@
     document.getElementById("turnEndBtn").disabled = !isMyTurn;
 
     const oa = document.getElementById("oppArea");
+    const oppNameB = oa.querySelector("b");
     if (selectedIdx !== null && oppField.length === 0) {
-      oa.querySelector("b").className = "direct-target";
+      oppNameB.classList.add("direct-target");
+      oa.style.cursor = "pointer";
       oa.onclick = directAtk;
     } else {
-      oa.querySelector("b").className = "";
+      oppNameB.classList.remove("direct-target");
+      oa.style.cursor = "default";
       oa.onclick = null;
     }
 
@@ -341,7 +353,7 @@
     document.querySelector(".status span").textContent = "待機中";
   }
   function cancelActions(e) {
-    if (e.target.closest('.card') || e.target.tagName === 'BUTTON') return;
+    if (e.target.closest('.card') || e.target.closest('#oppArea') || e.target.tagName === 'BUTTON') return;
     selectedIdx = null; sacrificeHandIdx = null; updateUI();
   }
   function showEnd(m) {
