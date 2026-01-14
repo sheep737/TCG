@@ -3,13 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ver:8 (順番決定機能付き)</title>
+<title>ver:9 (リセット機能付き)</title>
 
 <style>
   body { margin: 0; padding: 16px; font-family: sans-serif; background: #f0f0f0; }
   .status { margin-bottom: 12px; font-size: 16px; }
   
-  /* 順番決めエリアのスタイル */
   #setup-area {
     background: #fff; padding: 10px; border-radius: 8px;
     margin-bottom: 15px; border: 1px solid #ccc; text-align: center;
@@ -21,6 +20,10 @@
   }
   button:active { background: #005ecb; }
   button:disabled { background: #aaa; }
+
+  /* ゲーム終了ボタンのスタイル */
+  .reset-btn { background: #ff3b30; margin-top: 20px; }
+  .reset-btn:active { background: #c62828; }
 
   .hand { display: flex; flex-wrap: wrap; gap: 8px; }
   .card {
@@ -37,22 +40,16 @@
     <button id="orderBtn" onclick="decideOrder()" style="margin-top:10px; background:#28a745;">順番を決める</button>
   </div>
 
-  <div class="status">
-    ルーム：<span id="roomId"></span> / あなた：<span id="myPlayer"></span>
-  </div>
-  <div class="status">
-    あなたの役割：<span id="myRole">判定中...</span>
-  </div>
-  <div class="status">
-    相手の手札：<span id="opponentHandCount">0</span> 枚
-  </div>
-  <div class="status">
-    デッキ残り：<span id="deckCount"></span> 枚
-  </div>
+  <div class="status">ルーム：<span id="roomId"></span> / あなた：<span id="myPlayer"></span></div>
+  <div class="status">あなたの役割：<span id="myRole">未定</span></div>
+  <div class="status">相手の手札：<span id="opponentHandCount">0</span> 枚</div>
+  <div class="status">デッキ残り：<span id="deckCount"></span> 枚</div>
 
   <button id="drawBtn" onclick="drawCard()" disabled>カードを引く</button>
 
   <div class="hand" id="hand"></div>
+
+  <button class="reset-btn" onclick="resetGame()">ゲームを終了してリセット</button>
 
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
@@ -77,18 +74,23 @@
   document.getElementById("roomId").textContent = roomId;
   document.getElementById("myPlayer").textContent = myPlayerId;
 
-  let deck = ["スライム", "ドラゴン", "ゴブリン", "ナイト", "ウィザード"];
+  // デッキの初期データ
+  const initialDeck = ["スライム", "ドラゴン", "ゴブリン", "ナイト", "ウィザード"];
+  let deck = [...initialDeck];
   let hand = [];
 
-  // --- 順番決定の同期処理 ---
+  // --- 順番決定・リセットの監視 ---
   database.ref("games/" + roomId + "/firstPlayer").on("value", snapshot => {
     const firstPlayerId = snapshot.val();
     if (firstPlayerId) {
       const isFirst = (myPlayerId === firstPlayerId);
       document.getElementById("myRole").textContent = isFirst ? "先攻" : "後攻";
       document.getElementById("order-text").textContent = "順番が決定しました";
-      document.getElementById("orderBtn").style.display = "none"; // ボタンを消す
-      document.getElementById("drawBtn").disabled = false; // 引けるようにする
+      document.getElementById("orderBtn").style.display = "none";
+      document.getElementById("drawBtn").disabled = false;
+    } else {
+      // 相手がリセットした時、自分の画面も初期状態に戻す
+      resetLocalState();
     }
   });
 
@@ -98,10 +100,28 @@
     database.ref("games/" + roomId + "/firstPlayer").set(randomChoice);
   }
 
+  // --- ゲーム終了（リセット）処理 ---
+  function resetGame() {
+    if (confirm("ゲームデータをリセットして最初に戻りますか？")) {
+      // Firebase上のデータを削除（nullをセットすると削除される）
+      database.ref("games/" + roomId).set(null);
+    }
+  }
+
+  // ローカル（自分の画面）の状態をリセット
+  function resetLocalState() {
+    deck = [...initialDeck];
+    hand = [];
+    document.getElementById("myRole").textContent = "未定";
+    document.getElementById("order-text").textContent = "先攻・後攻が決まっていません";
+    document.getElementById("orderBtn").style.display = "block";
+    document.getElementById("drawBtn").disabled = true;
+    update();
+  }
+
   // --- 既存の処理 ---
   database.ref("games/" + roomId + "/" + opponentPlayerId + "/handCount").on("value", snapshot => {
-    const count = snapshot.val() || 0;
-    document.getElementById("opponentHandCount").textContent = count;
+    document.getElementById("opponentHandCount").textContent = snapshot.val() || 0;
   });
 
   function getQueryParam(name) {
@@ -110,10 +130,7 @@
   }
   
   function drawCard() {
-    if (deck.length === 0) {
-      alert("デッキが空です");
-      return;
-    }
+    if (deck.length === 0) return alert("デッキが空です");
     hand.push(deck.shift());
     database.ref("games/" + roomId + "/" + myPlayerId + "/handCount").set(hand.length);
     update();
@@ -123,7 +140,7 @@
     document.getElementById("deckCount").textContent = deck.length;
     const handDiv = document.getElementById("hand");
     handDiv.innerHTML = "";
-    hand.forEach((name) => {
+    hand.forEach(name => {
       const card = document.createElement("div");
       card.className = "card";
       card.textContent = name;
@@ -133,6 +150,5 @@
 
   update();
 </script>
-
 </body>
 </html>
