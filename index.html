@@ -3,32 +3,19 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ver:12 (ゲーム開始ボタン)</title>
+<title>ver:13 (初期手札3枚)</title>
 
 <style>
   body { margin: 0; padding: 16px; font-family: sans-serif; background: #f0f0f0; }
   .status { margin-bottom: 12px; font-size: 16px; }
-  
-  /* ゲーム開始エリア */
-  #setup-area { 
-    background: #fff; padding: 20px; border-radius: 12px; 
-    margin-bottom: 15px; border: 2px solid #34c759; text-align: center; 
-    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-  }
-  
+  #setup-area { background: #fff; padding: 20px; border-radius: 12px; margin-bottom: 15px; border: 2px solid #34c759; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
   button { width: 100%; height: 52px; font-size: 18px; border: none; border-radius: 8px; background: #007aff; color: white; margin-bottom: 12px; cursor: pointer; font-weight: bold; }
   button:disabled { background: #aaa; cursor: not-allowed; }
-  
-  /* 開始ボタンを強調 */
   #startBtn { background: #34c759; font-size: 22px; height: 60px; }
-  #startBtn:active { background: #28a745; }
-
   .turn-end-btn { background: #ff9500; }
   .reset-btn { background: #ff3b30; margin-top: 20px; font-size: 14px; height: 40px; }
-
   .hand { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
   .card { width: calc(50% - 4px); background: white; border-radius: 8px; padding: 12px; text-align: center; font-size: 16px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); box-sizing: border-box; }
-  
   .active-turn { color: #007aff; font-weight: bold; font-size: 1.2em; border: 2px solid #007aff; padding: 5px; border-radius: 5px; display: inline-block; background: #e6f0ff; }
 </style>
 </head>
@@ -36,7 +23,7 @@
 <body>
   <div id="setup-area">
     <div id="setup-text" style="margin-bottom: 10px; color: #666;">プレイヤーが揃ったらボタンを押してください</div>
-    <button id="startBtn" onclick="startGame()">ゲーム開始</button>
+    <button id="startBtn" onclick="startGame()">ゲーム開始 (3枚引く)</button>
   </div>
 
   <div class="status">ルーム：<span id="roomId"></span> / あなた：<span id="myPlayer"></span></div>
@@ -74,24 +61,19 @@
   document.getElementById("roomId").textContent = roomId;
   document.getElementById("myPlayer").textContent = myPlayerId;
 
-  const initialDeck = ["スライム", "ドラゴン", "ゴブリン", "ナイト", "ウィザード", "僧侶", "弓使い", "ゴーレム"];
+  const initialDeck = ["スライム", "ドラゴン", "ゴブリン", "ナイト", "ウィザード", "僧侶", "弓使い", "ゴーレム", "フェニックス", "ケルベロス"];
   let deck = [...initialDeck];
   let hand = [];
   let isMyTurn = false;
 
-  // データの監視
   database.ref(`games/${roomId}`).on("value", snapshot => {
     const data = snapshot.val();
-    if (!data) {
-      resetLocalState();
-      return;
-    }
+    if (!data) { resetLocalState(); return; }
 
-    // ゲーム開始後のUI表示
     if (data.firstPlayer) {
       const isFirst = (myPlayerId === data.firstPlayer);
       document.getElementById("myRole").textContent = isFirst ? "先攻" : "後攻";
-      document.getElementById("setup-area").style.display = "none"; // 開始エリアを隠す
+      document.getElementById("setup-area").style.display = "none";
     }
 
     if (data.currentTurn) {
@@ -106,20 +88,31 @@
     const opponentHand = (data[opponentPlayerId] && data[opponentPlayerId].handList) || [];
     document.getElementById("opponentHandCount").textContent = opponentHand.length;
     
+    // 全手札にあるカードを初期デッキから除外して現在の山札を計算
     const allInHand = [...hand, ...opponentHand];
     deck = initialDeck.filter(card => !allInHand.includes(card));
     
     updateUI();
   });
 
-  // 「ゲーム開始」ボタンの処理
   function startGame() {
+    // 1. デッキをシャッフル
+    const shuffled = [...initialDeck].sort(() => Math.random() - 0.5);
+    
+    // 2. それぞれに3枚ずつ配る
+    const hand1 = [shuffled[0], shuffled[1], shuffled[2]];
+    const hand2 = [shuffled[3], shuffled[4], shuffled[5]];
+    
+    // 3. 先攻を決定
     const players = ["player1", "player2"];
     const firstPlayer = players[Math.floor(Math.random() * 2)];
-    // Firebaseに開始情報を書き込む
+
+    // 4. Firebaseを一括更新
     database.ref(`games/${roomId}`).update({
       firstPlayer: firstPlayer,
-      currentTurn: firstPlayer
+      currentTurn: firstPlayer,
+      player1: { handList: hand1 },
+      player2: { handList: hand2 }
     });
   }
 
@@ -128,28 +121,20 @@
   }
 
   function drawCard() {
-    if (!isMyTurn) return;
-    if (deck.length === 0) return alert("デッキが空です");
+    if (!isMyTurn || deck.length === 0) return;
     const newHand = [...hand, deck[0]];
     database.ref(`games/${roomId}/${myPlayerId}/handList`).set(newHand);
   }
 
   function resetGame() {
-    if (confirm("ゲームを終了してリセットしますか？")) {
-      database.ref(`games/${roomId}`).set(null);
-    }
+    if (confirm("リセットしますか？")) database.ref(`games/${roomId}`).set(null);
   }
 
   function resetLocalState() {
-    hand = [];
-    deck = [...initialDeck];
-    isMyTurn = false;
+    hand = []; deck = [...initialDeck]; isMyTurn = false;
     document.getElementById("myRole").textContent = "未定";
     document.getElementById("currentTurnOwner").textContent = "待機中";
-    document.getElementById("currentTurnOwner").className = "";
     document.getElementById("setup-area").style.display = "block";
-    document.getElementById("drawBtn").disabled = true;
-    document.getElementById("turnEndBtn").disabled = true;
     updateUI();
   }
 
@@ -169,7 +154,6 @@
       handDiv.appendChild(card);
     });
   }
-
   updateUI();
 </script>
 </body>
