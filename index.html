@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ver:15 (個別デッキ制)</title>
+<title>ver:16 (リセット完全化)</title>
 <style>
   body { margin: 0; padding: 16px; font-family: sans-serif; background: #f0f0f0; }
   .status { margin-bottom: 8px; font-size: 15px; }
@@ -20,7 +20,7 @@
 <body>
 
   <div id="setup-area">
-    <button id="startBtn" onclick="startGame()">ゲーム開始 (個別デッキ3枚配分)</button>
+    <button id="startBtn" onclick="startGame()">ゲーム開始</button>
   </div>
 
   <div class="status">ルーム：<span id="roomId"></span> / あなた：<span id="myPlayer"></span></div>
@@ -32,7 +32,7 @@
   <button id="drawBtn" onclick="drawCard()" disabled>カードを引く</button>
   <button id="turnEndBtn" class="turn-end-btn" onclick="endTurn()" disabled>ターン終了</button>
 
-  <div class="hand" id="hand"></div>
+  <div id="hand" class="hand"></div>
   <button class="reset-btn" onclick="resetGame()">強制リセット</button>
 
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
@@ -58,7 +58,6 @@
   document.getElementById("roomId").textContent = roomId;
   document.getElementById("myPlayer").textContent = myPlayerId;
 
-  // 各プレイヤー10枚ずつのデッキリスト
   const p1Cards = ["火の精霊", "水の精霊", "風の精霊", "地の精霊", "光の騎士", "闇の魔導師", "雷神", "氷鬼", "戦乙女", "大盾兵"];
   const p2Cards = ["スライム", "ドラゴン", "ゴブリン", "ナイト", "ウィザード", "僧侶", "弓使い", "ゴーレム", "不死鳥", "死神"];
 
@@ -66,10 +65,17 @@
   let myHand = [];
   let isMyTurn = false;
 
+  // Firebase監視
   database.ref(`games/${roomId}`).on("value", snapshot => {
     const data = snapshot.val();
-    if (!data) { resetLocalUI(); return; }
+    
+    // データが空（リセットされた）場合
+    if (!data) {
+      resetLocalUI();
+      return;
+    }
 
+    // ターンの同期
     if (data.currentTurn) {
       document.getElementById("setup-area").style.display = "none";
       isMyTurn = (data.currentTurn === myPlayerId);
@@ -79,12 +85,12 @@
       document.getElementById("turnEndBtn").disabled = !isMyTurn;
     }
 
-    // 自分のデータ同期
+    // 自分のデータ
     myHand = (data[myPlayerId] && data[myPlayerId].handList) || [];
     myDeck = (data[myPlayerId] && data[myPlayerId].deck) || [];
     document.getElementById("myDeckCount").textContent = myDeck.length;
 
-    // 相手のデータ同期（枚数のみ表示）
+    // 相手のデータ
     const oppHand = (data[opponentPlayerId] && data[opponentPlayerId].handList) || [];
     const oppDeck = (data[opponentPlayerId] && data[opponentPlayerId].deck) || [];
     document.getElementById("opponentHandCount").textContent = oppHand.length;
@@ -96,8 +102,6 @@
   function startGame() {
     const deck1 = [...p1Cards].sort(() => Math.random() - 0.5);
     const deck2 = [...p2Cards].sort(() => Math.random() - 0.5);
-    
-    // それぞれ自分のデッキから3枚引く
     const hand1 = deck1.splice(0, 3);
     const hand2 = deck2.splice(0, 3);
 
@@ -110,7 +114,6 @@
 
   function drawCard() {
     if (!isMyTurn || myDeck.length === 0) return;
-    
     const newDeck = [...myDeck];
     const card = newDeck.shift();
     const newHand = [...myHand, card];
@@ -126,7 +129,28 @@
   }
 
   function resetGame() {
-    if (confirm("リセットしますか？")) database.ref(`games/${roomId}`).set(null);
+    if (confirm("ゲームをリセットして初期状態に戻しますか？")) {
+      database.ref(`games/${roomId}`).set(null);
+    }
+  }
+
+  // 画面表示を完全に初期化する関数
+  function resetLocalUI() {
+    // 変数のリセット
+    myHand = [];
+    myDeck = [];
+    isMyTurn = false;
+
+    // UI要素のリセット
+    document.getElementById("setup-area").style.display = "block";
+    document.getElementById("currentTurnOwner").textContent = "待機中";
+    document.getElementById("currentTurnOwner").className = "";
+    document.getElementById("opponentHandCount").textContent = "0";
+    document.getElementById("opponentDeckCount").textContent = "0";
+    document.getElementById("myDeckCount").textContent = "0";
+    document.getElementById("hand").innerHTML = "";
+    document.getElementById("drawBtn").disabled = true;
+    document.getElementById("turnEndBtn").disabled = true;
   }
 
   function updateHandUI() {
@@ -138,13 +162,6 @@
       card.textContent = name;
       handDiv.appendChild(card);
     });
-  }
-
-  function resetLocalUI() {
-    document.getElementById("setup-area").style.display = "block";
-    document.getElementById("hand").innerHTML = "";
-    document.getElementById("myDeckCount").textContent = "0";
-    document.getElementById("opponentDeckCount").textContent = "0";
   }
 </script>
 </body>
