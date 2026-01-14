@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ver:18 (バトルフィールド実装)</title>
+<title>ver:19 (攻撃力の実装)</title>
 <style>
   body { margin: 0; padding: 16px; font-family: sans-serif; background: #f0f0f0; }
   .status { margin-bottom: 8px; font-size: 14px; }
@@ -11,22 +11,25 @@
   button { width: 100%; height: 52px; font-size: 18px; border: none; border-radius: 8px; background: #007aff; color: white; margin-bottom: 12px; cursor: pointer; font-weight: bold; }
   button:disabled { background: #aaa; cursor: not-allowed; }
   
-  /* フィールド（場）のスタイル */
+  /* フィールドのスタイル */
   .field-container { 
     display: flex; flex-direction: column; gap: 10px; background: #ddd; 
-    padding: 10px; border-radius: 8px; margin: 15px 0; min-height: 200px;
+    padding: 10px; border-radius: 8px; margin: 15px 0; min-height: 220px;
     border: 2px dashed #999;
   }
-  .field-side { display: flex; gap: 8px; justify-content: center; min-height: 80px; align-items: center; }
+  .field-side { display: flex; gap: 8px; justify-content: center; min-height: 100px; align-items: center; overflow-x: auto; }
   .field-label { font-size: 12px; color: #666; width: 100%; text-align: center; }
 
-  /* カード共通スタイル */
+  /* カードデザインの変更 */
   .card { 
-    width: calc(50% - 4px); background: white; border-radius: 8px; padding: 12px; 
+    width: calc(50% - 4px); background: white; border-radius: 8px; padding: 10px 5px; 
     text-align: center; font-size: 14px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); 
-    box-sizing: border-box; cursor: pointer;
+    box-sizing: border-box; cursor: pointer; display: flex; flex-direction: column; justify-content: space-between;
   }
-  .field-card { width: 70px; height: 100px; font-size: 12px; display: flex; align-items: center; justify-content: center; }
+  .atk { color: #ff3b30; font-weight: bold; font-size: 16px; margin-top: 5px; }
+  .atk::before { content: "ATK "; font-size: 10px; }
+
+  .field-card { width: 75px; height: 100px; font-size: 11px; flex-shrink: 0; }
   
   .hand { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
   .active-turn { color: #007aff; font-weight: bold; border: 2px solid #007aff; padding: 4px; border-radius: 5px; background: #e6f0ff; }
@@ -82,8 +85,17 @@
   document.getElementById("roomId").textContent = roomId;
   document.getElementById("myPlayer").textContent = myPlayerId;
 
-  const p1Cards = ["火の精霊", "水の精霊", "風の精霊", "地の精霊", "光の騎士", "闇の魔導師", "雷神", "氷鬼", "戦乙女", "大盾兵"];
-  const p2Cards = ["スライム", "ドラゴン", "ゴブリン", "ナイト", "ウィザード", "僧侶", "弓使い", "ゴーレム", "不死鳥", "死神"];
+  // カードデータの定義（名前と攻撃力）
+  const p1Master = [
+    {n:"火の精霊", a:400}, {n:"水の精霊", a:400}, {n:"風の精霊", a:400}, {n:"地の精霊", a:400},
+    {n:"光の騎士", a:700}, {n:"闇の魔導師", a:600}, {n:"雷神", a:800}, {n:"氷鬼", a:500},
+    {n:"戦乙女", a:750}, {n:"大盾兵", a:300}
+  ];
+  const p2Master = [
+    {n:"スライム", a:100}, {n:"ドラゴン", a:900}, {n:"ゴブリン", a:200}, {n:"ナイト", a:500},
+    {n:"ウィザード", a:550}, {n:"僧侶", a:300}, {n:"弓使い", a:400}, {n:"ゴーレム", a:600},
+    {n:"不死鳥", a:1000}, {n:"死神", a:700}
+  ];
 
   let myDeck = [], myHand = [], myField = [], oppField = [], isMyTurn = false, lastTurnId = "";
 
@@ -117,12 +129,12 @@
   });
 
   function startGame() {
-    const d1 = [...p1Cards].sort(() => Math.random() - 0.5);
-    const d2 = [...p2Cards].sort(() => Math.random() - 0.5);
+    const d1 = [...p1Master].sort(() => Math.random() - 0.5);
+    const d2 = [...p2Master].sort(() => Math.random() - 0.5);
     database.ref(`games/${roomId}`).set({
       currentTurn: "player1", turnCount: 1,
-      player1: { deck: d1.splice(3), handList: d1.splice(0, 3), field: [] },
-      player2: { deck: d2.splice(3), handList: d2.splice(0, 3), field: [] }
+      player1: { deck: d1.slice(3), handList: d1.slice(0, 3), field: [] },
+      player2: { deck: d2.slice(3), handList: d2.slice(0, 3), field: [] }
     });
   }
 
@@ -134,20 +146,16 @@
     database.ref(`games/${roomId}/${myPlayerId}`).update({ deck: newDeck, handList: newHand });
   }
 
-  // カードを場に出す関数
   function playCard(index) {
-    if (!isMyTurn) { alert("自分のターンではありません"); return; }
-    const cardName = myHand[index];
-    if (!confirm(`${cardName} を場に出しますか？`)) return;
+    if (!isMyTurn) return;
+    const card = myHand[index];
+    if (!confirm(`${card.n} (ATK:${card.a}) を場に出しますか？`)) return;
 
     const newHand = [...myHand];
     newHand.splice(index, 1);
-    const newField = [...myField, cardName];
+    const newField = [...myField, card];
 
-    database.ref(`games/${roomId}/${myPlayerId}`).update({
-      handList: newHand,
-      field: newField
-    });
+    database.ref(`games/${roomId}/${myPlayerId}`).update({ handList: newHand, field: newField });
   }
 
   function endTurn() {
@@ -160,39 +168,42 @@
     });
   }
 
-  function resetGame() { if (confirm("リセット？")) database.ref(`games/${roomId}`).set(null); }
+  function resetGame() { if (confirm("リセットしますか？")) database.ref(`games/${roomId}`).set(null); }
+
+  // カードHTML作成の共通化
+  function createCardElement(card, isHand, index) {
+    const div = document.createElement("div");
+    div.className = isHand ? "card" : "card field-card";
+    
+    const nameSpan = document.createElement("span");
+    nameSpan.textContent = card.n;
+    
+    const atkSpan = document.createElement("span");
+    atkSpan.className = "atk";
+    atkSpan.textContent = card.a;
+    
+    div.appendChild(nameSpan);
+    div.appendChild(atkSpan);
+    
+    if (isHand) div.onclick = () => playCard(index);
+    return div;
+  }
 
   function updateUI() {
-    // 手札の更新
     const handDiv = document.getElementById("hand");
     handDiv.innerHTML = "";
-    myHand.forEach((name, i) => {
-      const c = document.createElement("div");
-      c.className = "card";
-      c.textContent = name;
-      c.onclick = () => playCard(i);
-      handDiv.appendChild(c);
-    });
+    myHand.forEach((card, i) => handDiv.appendChild(createCardElement(card, true, i)));
 
-    // 自分の場の更新
     const myFieldDiv = document.getElementById("myField");
     myFieldDiv.innerHTML = "";
-    myField.forEach(name => {
-      const c = document.createElement("div");
-      c.className = "card field-card";
-      c.textContent = name;
-      myFieldDiv.appendChild(c);
-    });
+    myField.forEach(card => myFieldDiv.appendChild(createCardElement(card, false)));
 
-    // 相手の場の更新
     const oppFieldDiv = document.getElementById("opponentField");
     oppFieldDiv.innerHTML = "";
-    oppField.forEach(name => {
-      const c = document.createElement("div");
-      c.className = "card field-card";
-      c.style.background = "#f9f9f9";
-      c.textContent = name;
-      oppFieldDiv.appendChild(c);
+    oppField.forEach(card => {
+      const cEl = createCardElement(card, false);
+      cEl.style.background = "#f9f9f9";
+      oppFieldDiv.appendChild(cEl);
     });
   }
 
