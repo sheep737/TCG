@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ver:16 (リセット完全化)</title>
+<title>ver:17 (オートドロー実装)</title>
 <style>
   body { margin: 0; padding: 16px; font-family: sans-serif; background: #f0f0f0; }
   .status { margin-bottom: 8px; font-size: 15px; }
@@ -64,16 +64,11 @@
   let myDeck = [];
   let myHand = [];
   let isMyTurn = false;
+  let lastTurnId = ""; // 最後に処理したターンのIDを記録
 
-  // Firebase監視
   database.ref(`games/${roomId}`).on("value", snapshot => {
     const data = snapshot.val();
-    
-    // データが空（リセットされた）場合
-    if (!data) {
-      resetLocalUI();
-      return;
-    }
+    if (!data) { resetLocalUI(); return; }
 
     // ターンの同期
     if (data.currentTurn) {
@@ -81,16 +76,25 @@
       isMyTurn = (data.currentTurn === myPlayerId);
       document.getElementById("currentTurnOwner").textContent = isMyTurn ? "あなたの番です" : "相手の番です";
       document.getElementById("currentTurnOwner").className = isMyTurn ? "active-turn" : "";
+      
       document.getElementById("drawBtn").disabled = !isMyTurn;
       document.getElementById("turnEndBtn").disabled = !isMyTurn;
+
+      // --- オートドロー処理 ---
+      // 自分のターンになった、かつ、前回のターン処理と異なる場合に実行
+      if (isMyTurn && lastTurnId !== data.currentTurn + "_" + (data.turnCount || 0)) {
+        lastTurnId = data.currentTurn + "_" + (data.turnCount || 0);
+        // 少し遅延させると「自分のターンになった感」が出ます
+        setTimeout(() => {
+          drawCard();
+        }, 500);
+      }
     }
 
-    // 自分のデータ
     myHand = (data[myPlayerId] && data[myPlayerId].handList) || [];
     myDeck = (data[myPlayerId] && data[myPlayerId].deck) || [];
     document.getElementById("myDeckCount").textContent = myDeck.length;
 
-    // 相手のデータ
     const oppHand = (data[opponentPlayerId] && data[opponentPlayerId].handList) || [];
     const oppDeck = (data[opponentPlayerId] && data[opponentPlayerId].deck) || [];
     document.getElementById("opponentHandCount").textContent = oppHand.length;
@@ -107,13 +111,17 @@
 
     database.ref(`games/${roomId}`).set({
       currentTurn: "player1",
+      turnCount: 1, // ターン数をカウント
       player1: { deck: deck1, handList: hand1 },
       player2: { deck: deck2, handList: hand2 }
     });
   }
 
   function drawCard() {
+    // 自分の番でない、または山札がないなら引かない
     if (!isMyTurn || myDeck.length === 0) return;
+    
+    // 現在の最新の山札と手札を再取得して計算（連続クリック対策）
     const newDeck = [...myDeck];
     const card = newDeck.shift();
     const newHand = [...myHand, card];
@@ -125,23 +133,24 @@
   }
 
   function endTurn() {
-    database.ref(`games/${roomId}/currentTurn`).set(opponentPlayerId);
+    // ターンを交代し、ターンカウントを進める
+    database.ref(`games/${roomId}`).transaction(data => {
+      if (data) {
+        data.currentTurn = opponentPlayerId;
+        data.turnCount = (data.turnCount || 0) + 1;
+      }
+      return data;
+    });
   }
 
   function resetGame() {
-    if (confirm("ゲームをリセットして初期状態に戻しますか？")) {
+    if (confirm("リセットしますか？")) {
       database.ref(`games/${roomId}`).set(null);
     }
   }
 
-  // 画面表示を完全に初期化する関数
   function resetLocalUI() {
-    // 変数のリセット
-    myHand = [];
-    myDeck = [];
-    isMyTurn = false;
-
-    // UI要素のリセット
+    myHand = []; myDeck = []; isMyTurn = false; lastTurnId = "";
     document.getElementById("setup-area").style.display = "block";
     document.getElementById("currentTurnOwner").textContent = "待機中";
     document.getElementById("currentTurnOwner").className = "";
