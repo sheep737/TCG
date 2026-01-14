@@ -3,37 +3,44 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ver:11 (ターン制の導入)</title>
+<title>ver:12 (ゲーム開始ボタン)</title>
 
 <style>
   body { margin: 0; padding: 16px; font-family: sans-serif; background: #f0f0f0; }
   .status { margin-bottom: 12px; font-size: 16px; }
-  #setup-area { background: #fff; padding: 10px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #ccc; text-align: center; }
   
-  /* ボタンのデザイン */
-  button { width: 100%; height: 52px; font-size: 18px; border: none; border-radius: 8px; background: #007aff; color: white; margin-bottom: 12px; cursor: pointer; }
+  /* ゲーム開始エリア */
+  #setup-area { 
+    background: #fff; padding: 20px; border-radius: 12px; 
+    margin-bottom: 15px; border: 2px solid #34c759; text-align: center; 
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+  }
+  
+  button { width: 100%; height: 52px; font-size: 18px; border: none; border-radius: 8px; background: #007aff; color: white; margin-bottom: 12px; cursor: pointer; font-weight: bold; }
   button:disabled { background: #aaa; cursor: not-allowed; }
   
-  /* ターン終了ボタン */
+  /* 開始ボタンを強調 */
+  #startBtn { background: #34c759; font-size: 22px; height: 60px; }
+  #startBtn:active { background: #28a745; }
+
   .turn-end-btn { background: #ff9500; }
   .reset-btn { background: #ff3b30; margin-top: 20px; font-size: 14px; height: 40px; }
 
   .hand { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
   .card { width: calc(50% - 4px); background: white; border-radius: 8px; padding: 12px; text-align: center; font-size: 16px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); box-sizing: border-box; }
   
-  /* ターン強調表示 */
-  .active-turn { color: #007aff; font-weight: bold; font-size: 1.2em; border: 2px solid #007aff; padding: 5px; border-radius: 5px; display: inline-block; }
+  .active-turn { color: #007aff; font-weight: bold; font-size: 1.2em; border: 2px solid #007aff; padding: 5px; border-radius: 5px; display: inline-block; background: #e6f0ff; }
 </style>
 </head>
 
 <body>
   <div id="setup-area">
-    <div id="order-text">先攻・後攻が決まっていません</div>
-    <button id="orderBtn" onclick="decideOrder()" style="margin-top:10px; background:#28a745;">順番を決める</button>
+    <div id="setup-text" style="margin-bottom: 10px; color: #666;">プレイヤーが揃ったらボタンを押してください</div>
+    <button id="startBtn" onclick="startGame()">ゲーム開始</button>
   </div>
 
   <div class="status">ルーム：<span id="roomId"></span> / あなた：<span id="myPlayer"></span></div>
-  <div class="status" id="turn-display">現在の番：<span id="currentTurnOwner">判定中...</span></div>
+  <div class="status" id="turn-display">現在の番：<span id="currentTurnOwner">待機中</span></div>
   <div class="status">あなたの役割：<span id="myRole">未定</span></div>
   <div class="status">相手の手札：<span id="opponentHandCount">0</span> 枚</div>
   <div class="status">デッキ残り：<span id="deckCount"></span> 枚</div>
@@ -42,7 +49,7 @@
   <button id="turnEndBtn" class="turn-end-btn" onclick="endTurn()" disabled>ターンを終了する</button>
 
   <div class="hand" id="hand"></div>
-  <button class="reset-btn" onclick="resetGame()">ゲーム全体をリセット</button>
+  <button class="reset-btn" onclick="resetGame()">ゲーム全体を強制終了</button>
 
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
@@ -72,7 +79,7 @@
   let hand = [];
   let isMyTurn = false;
 
-  // --- ターン管理と順番決定の同期 ---
+  // データの監視
   database.ref(`games/${roomId}`).on("value", snapshot => {
     const data = snapshot.val();
     if (!data) {
@@ -80,42 +87,36 @@
       return;
     }
 
-    // 1. 役割（先攻・後攻）の確認
+    // ゲーム開始後のUI表示
     if (data.firstPlayer) {
       const isFirst = (myPlayerId === data.firstPlayer);
       document.getElementById("myRole").textContent = isFirst ? "先攻" : "後攻";
-      document.getElementById("orderBtn").style.display = "none";
-      document.getElementById("order-text").textContent = "順番が決定しました";
+      document.getElementById("setup-area").style.display = "none"; // 開始エリアを隠す
     }
 
-    // 2. 現在のターンの確認
     if (data.currentTurn) {
       isMyTurn = (data.currentTurn === myPlayerId);
-      const turnOwnerText = isMyTurn ? "あなたの番です！" : "相手の番です";
-      document.getElementById("currentTurnOwner").textContent = turnOwnerText;
+      document.getElementById("currentTurnOwner").textContent = isMyTurn ? "あなたの番です！" : "相手の番です";
       document.getElementById("currentTurnOwner").className = isMyTurn ? "active-turn" : "";
-      
-      // 自分の番の時だけボタンを有効化
       document.getElementById("drawBtn").disabled = !isMyTurn;
       document.getElementById("turnEndBtn").disabled = !isMyTurn;
     }
 
-    // 3. 手札の更新
     hand = (data[myPlayerId] && data[myPlayerId].handList) || [];
     const opponentHand = (data[opponentPlayerId] && data[opponentPlayerId].handList) || [];
     document.getElementById("opponentHandCount").textContent = opponentHand.length;
     
-    // デッキ計算
     const allInHand = [...hand, ...opponentHand];
     deck = initialDeck.filter(card => !allInHand.includes(card));
     
     updateUI();
   });
 
-  function decideOrder() {
+  // 「ゲーム開始」ボタンの処理
+  function startGame() {
     const players = ["player1", "player2"];
     const firstPlayer = players[Math.floor(Math.random() * 2)];
-    // 先攻を決めたら、最初のターンもその人に設定する
+    // Firebaseに開始情報を書き込む
     database.ref(`games/${roomId}`).update({
       firstPlayer: firstPlayer,
       currentTurn: firstPlayer
@@ -123,19 +124,18 @@
   }
 
   function endTurn() {
-    // ターンを相手に渡す
     database.ref(`games/${roomId}/currentTurn`).set(opponentPlayerId);
   }
 
   function drawCard() {
-    if (!isMyTurn) return; // 念のためのガード
+    if (!isMyTurn) return;
     if (deck.length === 0) return alert("デッキが空です");
     const newHand = [...hand, deck[0]];
     database.ref(`games/${roomId}/${myPlayerId}/handList`).set(newHand);
   }
 
   function resetGame() {
-    if (confirm("全てリセットしますか？")) {
+    if (confirm("ゲームを終了してリセットしますか？")) {
       database.ref(`games/${roomId}`).set(null);
     }
   }
@@ -145,10 +145,9 @@
     deck = [...initialDeck];
     isMyTurn = false;
     document.getElementById("myRole").textContent = "未定";
-    document.getElementById("currentTurnOwner").textContent = "未定";
+    document.getElementById("currentTurnOwner").textContent = "待機中";
     document.getElementById("currentTurnOwner").className = "";
-    document.getElementById("orderBtn").style.display = "block";
-    document.getElementById("order-text").textContent = "先攻・後攻が決まっていません";
+    document.getElementById("setup-area").style.display = "block";
     document.getElementById("drawBtn").disabled = true;
     document.getElementById("turnEndBtn").disabled = true;
     updateUI();
@@ -170,6 +169,8 @@
       handDiv.appendChild(card);
     });
   }
+
+  updateUI();
 </script>
 </body>
 </html>
