@@ -3,14 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>TCG Master Ver.36</title>
+<title>TCG Master Ver.37</title>
 <style>
   :root { --primary: #007aff; --danger: #ff3b30; --success: #34c759; --warning: #ff9500; }
   body { margin: 0; padding: 16px; font-family: -apple-system, sans-serif; background: #f0f0f0; user-select: none; }
   
   /* 情報表示 */
   .info-bar { background: #333; color: white; padding: 10px; border-radius: 8px; margin-bottom: 12px; font-size: 13px; line-height: 1.6; }
-  .info-bar b { color: #5ac8fa; }
+  .info-bar b { color: #5ac8fa; transition: all 0.3s; }
   .status { margin-bottom: 8px; font-size: 14px; text-align: center; height: 45px; }
   .active-turn { color: var(--primary); font-weight: bold; border: 2px solid var(--primary); padding: 6px; border-radius: 8px; background: #e6f0ff; display: block; }
 
@@ -23,7 +23,7 @@
   .deck-count { font-size: 24px; font-weight: bold; color: var(--danger); text-align: center; margin-bottom: 10px; }
 
   /* フィールド */
-  .field-container { display: flex; flex-direction: column; gap: 10px; background: #ddd; padding: 10px; border-radius: 8px; margin: 15px 0; min-height: 260px; border: 2px dashed #999; position: relative; }
+  .field-container { display: flex; flex-direction: column; gap: 10px; background: #ddd; padding: 10px; border-radius: 8px; margin: 15px 0; min-height: 260px; border: 2px dashed #999; }
   .field-side { display: flex; gap: 8px; justify-content: center; min-height: 115px; align-items: center; }
   
   /* カード */
@@ -38,7 +38,9 @@
   .selected { border-color: var(--warning); box-shadow: 0 0 10px var(--warning); transform: translateY(-5px); }
   .targetable { border-color: var(--danger); animation: blink 0.8s infinite; }
   .sacrifice-target { border-color: var(--primary); animation: blink 0.8s infinite; cursor: pointer; }
-  .direct-target { background: var(--danger) !important; color: white !important; animation: blink 0.5s infinite; cursor: pointer; border-radius: 4px; }
+  
+  /* 直接攻撃ターゲット点滅 */
+  .direct-target { background: var(--danger) !important; color: white !important; animation: blink 0.5s infinite; border-radius: 4px; padding: 0 4px; }
 
   @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
 
@@ -63,9 +65,9 @@
 
   <div id="game-view">
     <div class="info-bar">
-      <div>ROOM: <b id="displayRoomId">-</b></div>
-      <div>自分: <b id="displayMyName">-</b> (被ダメージ: <span id="myDamage">0</span>/3)</div>
-      <div id="oppArea">相手: <b id="displayOppName">-</b> (被ダメージ: <span id="oppDamage">0</span>/3)</div>
+      <div>ROOM ID: <b id="displayRoomId">-</b></div>
+      <div>あなた: <b id="displayMyName">-</b> (ダメージ: <span id="myDamage">0</span>/3)</div>
+      <div id="oppArea">相手: <b id="displayOppName">-</b> (ダメージ: <span id="oppDamage">0</span>/3)</div>
     </div>
 
     <div id="setup-area">
@@ -94,7 +96,6 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
 <script>
-  // --- Firebase設定 ---
   const firebaseConfig = {
     apiKey: "AIzaSyCzUHmyYcQlYkJmeXX5Cxp_fNFkonOSE3I",
     authDomain: "tcgtk-51f73.firebaseapp.com",
@@ -171,18 +172,14 @@
     database.ref(`games/${roomId}`).on("value", snap => {
       const data = snap.val();
       if (!data) { resetLocalUI(); return; }
-
       turnCount = data.turnCount || 0;
       const me = data[myPlayerId] || {};
       const opp = data[opponentPlayerId] || {};
-
       if (me.damage >= 3) showEnd("DEFEAT...");
       else if (opp.damage >= 3) showEnd("YOU WIN!");
       else document.getElementById("end-screen").style.display = "none";
-
       document.getElementById("myDamage").textContent = me.damage || 0;
       document.getElementById("oppDamage").textContent = opp.damage || 0;
-
       if (data.currentTurn) {
         document.getElementById("setup-area").style.display = "none";
         isMyTurn = (data.currentTurn === myPlayerId);
@@ -198,27 +195,19 @@
     });
   }
 
-  // ★修正：全員のデッキを同期して開始
   async function startGameSync() {
     const [mySnap, oppSnap] = await Promise.all([
       database.ref(`decks/${myPlayerId}`).get(),
       database.ref(`decks/${opponentPlayerId}`).get()
     ]);
-
-    if (!mySnap.exists()) return alert("自分のデッキがありません。編集画面で保存してください。");
-    if (!oppSnap.exists()) return alert("相手のデッキがサーバーに見つかりません。");
-
+    if (!mySnap.exists() || !oppSnap.exists()) return alert("全員のデッキ保存が必要です");
     const myD = mySnap.val().sort(() => Math.random() - 0.5);
     const oppD = oppSnap.val().sort(() => Math.random() - 0.5);
-
-    const initialState = {
-      currentTurn: "player1",
-      turnCount: 1,
+    database.ref(`games/${roomId}`).set({
+      currentTurn: "player1", turnCount: 1,
       [myPlayerId]: { deck: myD.slice(3), handList: myD.slice(0, 3), field: [], damage: 0 },
       [opponentPlayerId]: { deck: oppD.slice(3), handList: oppD.slice(0, 3), field: [], damage: 0 }
-    };
-
-    database.ref(`games/${roomId}`).set(initialState);
+    });
   }
 
   function autoDraw() {
@@ -234,7 +223,6 @@
   function playCard(i, e) {
     e.stopPropagation();
     if (!isMyTurn) return;
-    if (sacrificeHandIdx === i) { sacrificeHandIdx = null; updateUI(); return; }
     const c = myHand[i];
     if (c.n === "不死鳥" || c.n === "ドラゴン") {
       if (myField.length === 0) return alert("生贄が必要です");
@@ -276,10 +264,12 @@
   }
 
   function directAtk(e) {
-    e.stopPropagation();
+    if (e) e.stopPropagation();
+    if (selectedIdx === null) return;
     database.ref(`games/${roomId}/${opponentPlayerId}/damage`).transaction(d => (d || 0) + 1);
     let f = [...myField]; f[selectedIdx].hasAttacked = true;
     database.ref(`games/${roomId}/${myPlayerId}/field`).set(f);
+    // 攻撃後に選択をクリア。updateUIでハイライトも消える
     selectedIdx = null;
   }
 
@@ -302,9 +292,10 @@
     sEl.parentElement.className = isMyTurn ? "status active-turn" : "status";
     document.getElementById("turnEndBtn").disabled = !isMyTurn;
 
+    // 直接攻撃ハイライト制御
     const oa = document.getElementById("oppArea");
     const oppNameB = oa.querySelector("b");
-    if (selectedIdx !== null && oppField.length === 0) {
+    if (isMyTurn && selectedIdx !== null && oppField.length === 0) {
       oppNameB.classList.add("direct-target");
       oa.style.cursor = "pointer";
       oa.onclick = directAtk;
