@@ -3,34 +3,31 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ver:14 (枚数同期の修正)</title>
+<title>ver:15 (個別デッキ制)</title>
 <style>
   body { margin: 0; padding: 16px; font-family: sans-serif; background: #f0f0f0; }
-  .status { margin-bottom: 12px; font-size: 16px; }
+  .status { margin-bottom: 8px; font-size: 15px; }
   #setup-area { background: #fff; padding: 20px; border-radius: 12px; margin-bottom: 15px; border: 2px solid #34c759; text-align: center; }
   button { width: 100%; height: 52px; font-size: 18px; border: none; border-radius: 8px; background: #007aff; color: white; margin-bottom: 12px; cursor: pointer; font-weight: bold; }
   button:disabled { background: #aaa; cursor: not-allowed; }
-  #startBtn { background: #34c759; }
   .turn-end-btn { background: #ff9500; }
   .reset-btn { background: #ff3b30; margin-top: 20px; font-size: 12px; height: 35px; }
   .hand { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
   .card { width: calc(50% - 4px); background: white; border-radius: 8px; padding: 12px; text-align: center; font-size: 16px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); box-sizing: border-box; }
-  .active-turn { color: #007aff; font-weight: bold; font-size: 1.1em; border: 2px solid #007aff; padding: 4px 8px; border-radius: 5px; background: #e6f0ff; }
+  .active-turn { color: #007aff; font-weight: bold; border: 2px solid #007aff; padding: 4px 8px; border-radius: 5px; background: #e6f0ff; }
 </style>
 </head>
 <body>
 
   <div id="setup-area">
-    <div style="margin-bottom:10px;">準備ができたら開始してください</div>
-    <button id="startBtn" onclick="startGame()">ゲーム開始 (3枚ずつ配布)</button>
+    <button id="startBtn" onclick="startGame()">ゲーム開始 (個別デッキ3枚配分)</button>
   </div>
 
   <div class="status">ルーム：<span id="roomId"></span> / あなた：<span id="myPlayer"></span></div>
   <div class="status">状態：<span id="currentTurnOwner">待機中</span></div>
-  <div class="status">あなたの役割：<span id="myRole">未定</span></div>
   <hr>
-  <div class="status">相手の手札：<span id="opponentHandCount">0</span> 枚</div>
-  <div class="status">山札の残り：<b id="deckCount">10</b> 枚</div>
+  <div class="status">相手の手札：<b id="opponentHandCount">0</b> 枚 / 相手の山札：<b id="opponentDeckCount">0</b> 枚</div>
+  <div class="status">自分の山札：<b id="myDeckCount">0</b> 枚</div>
 
   <button id="drawBtn" onclick="drawCard()" disabled>カードを引く</button>
   <button id="turnEndBtn" class="turn-end-btn" onclick="endTurn()" disabled>ターン終了</button>
@@ -54,33 +51,27 @@
 
   firebase.initializeApp(firebaseConfig);
   const database = firebase.database();
-  const roomId = getQueryParam("room") || "room1";
-  const myPlayerId = getQueryParam("player") || "player1";
+  const roomId = new URLSearchParams(window.location.search).get("room") || "room1";
+  const myPlayerId = new URLSearchParams(window.location.search).get("player") || "player1";
   const opponentPlayerId = myPlayerId === "player1" ? "player2" : "player1";
 
   document.getElementById("roomId").textContent = roomId;
   document.getElementById("myPlayer").textContent = myPlayerId;
 
-  const initialCards = ["スライム", "ドラゴン", "ゴブリン", "ナイト", "ウィザード", "僧侶", "弓使い", "ゴーレム", "フェニックス", "ケルベロス"];
-  let currentDeck = [];
+  // 各プレイヤー10枚ずつのデッキリスト
+  const p1Cards = ["火の精霊", "水の精霊", "風の精霊", "地の精霊", "光の騎士", "闇の魔導師", "雷神", "氷鬼", "戦乙女", "大盾兵"];
+  const p2Cards = ["スライム", "ドラゴン", "ゴブリン", "ナイト", "ウィザード", "僧侶", "弓使い", "ゴーレム", "不死鳥", "死神"];
+
+  let myDeck = [];
   let myHand = [];
   let isMyTurn = false;
 
-  // Firebaseの全データ監視
   database.ref(`games/${roomId}`).on("value", snapshot => {
     const data = snapshot.val();
-    if (!data) {
-      resetLocalUI();
-      return;
-    }
+    if (!data) { resetLocalUI(); return; }
 
-    // 1. 順番とターンの同期
-    if (data.firstPlayer) {
-      document.getElementById("setup-area").style.display = "none";
-      document.getElementById("myRole").textContent = (myPlayerId === data.firstPlayer) ? "先攻" : "後攻";
-    }
-    
     if (data.currentTurn) {
+      document.getElementById("setup-area").style.display = "none";
       isMyTurn = (data.currentTurn === myPlayerId);
       document.getElementById("currentTurnOwner").textContent = isMyTurn ? "あなたの番です" : "相手の番です";
       document.getElementById("currentTurnOwner").className = isMyTurn ? "active-turn" : "";
@@ -88,48 +79,44 @@
       document.getElementById("turnEndBtn").disabled = !isMyTurn;
     }
 
-    // 2. 山札と手札の同期（ここが修正ポイント）
-    currentDeck = data.deck || [];
+    // 自分のデータ同期
     myHand = (data[myPlayerId] && data[myPlayerId].handList) || [];
-    const opponentHandList = (data[opponentPlayerId] && data[opponentPlayerId].handList) || [];
+    myDeck = (data[myPlayerId] && data[myPlayerId].deck) || [];
+    document.getElementById("myDeckCount").textContent = myDeck.length;
 
-    document.getElementById("deckCount").textContent = currentDeck.length;
-    document.getElementById("opponentHandCount").textContent = opponentHandList.length;
+    // 相手のデータ同期（枚数のみ表示）
+    const oppHand = (data[opponentPlayerId] && data[opponentPlayerId].handList) || [];
+    const oppDeck = (data[opponentPlayerId] && data[opponentPlayerId].deck) || [];
+    document.getElementById("opponentHandCount").textContent = oppHand.length;
+    document.getElementById("opponentDeckCount").textContent = oppDeck.length;
 
     updateHandUI();
   });
 
   function startGame() {
-    // デッキをシャッフル
-    const shuffled = [...initialCards].sort(() => Math.random() - 0.5);
+    const deck1 = [...p1Cards].sort(() => Math.random() - 0.5);
+    const deck2 = [...p2Cards].sort(() => Math.random() - 0.5);
     
-    // 3枚ずつ配る
-    const hand1 = shuffled.splice(0, 3);
-    const hand2 = shuffled.splice(0, 3);
-    // 残りが山札（4枚残るはず）
-    const remainingDeck = shuffled;
-
-    const firstPlayer = Math.random() < 0.5 ? "player1" : "player2";
+    // それぞれ自分のデッキから3枚引く
+    const hand1 = deck1.splice(0, 3);
+    const hand2 = deck2.splice(0, 3);
 
     database.ref(`games/${roomId}`).set({
-      firstPlayer: firstPlayer,
-      currentTurn: firstPlayer,
-      deck: remainingDeck,
-      player1: { handList: hand1 },
-      player2: { handList: hand2 }
+      currentTurn: "player1",
+      player1: { deck: deck1, handList: hand1 },
+      player2: { deck: deck2, handList: hand2 }
     });
   }
 
   function drawCard() {
-    if (!isMyTurn || currentDeck.length === 0) return;
+    if (!isMyTurn || myDeck.length === 0) return;
     
-    const deckArr = [...currentDeck];
-    const pickedCard = deckArr.shift(); // 山札の先頭を抜く
-    const newHand = [...myHand, pickedCard];
+    const newDeck = [...myDeck];
+    const card = newDeck.shift();
+    const newHand = [...myHand, card];
 
-    // 山札と自分の手札を同時に更新
     const updates = {};
-    updates[`/deck`] = deckArr;
+    updates[`/${myPlayerId}/deck`] = newDeck;
     updates[`/${myPlayerId}/handList`] = newHand;
     database.ref(`games/${roomId}`).update(updates);
   }
@@ -139,18 +126,7 @@
   }
 
   function resetGame() {
-    if (confirm("データをリセットしますか？")) database.ref(`games/${roomId}`).set(null);
-  }
-
-  function resetLocalUI() {
-    document.getElementById("setup-area").style.display = "block";
-    document.getElementById("myRole").textContent = "未定";
-    document.getElementById("currentTurnOwner").textContent = "待機中";
-    document.getElementById("currentTurnOwner").className = "";
-    document.getElementById("deckCount").textContent = "10";
-    document.getElementById("hand").innerHTML = "";
-    document.getElementById("drawBtn").disabled = true;
-    document.getElementById("turnEndBtn").disabled = true;
+    if (confirm("リセットしますか？")) database.ref(`games/${roomId}`).set(null);
   }
 
   function updateHandUI() {
@@ -164,9 +140,11 @@
     });
   }
 
-  function getQueryParam(name) {
-    const params = new URLSearchParams(window.location.search);
-    return params.get(name);
+  function resetLocalUI() {
+    document.getElementById("setup-area").style.display = "block";
+    document.getElementById("hand").innerHTML = "";
+    document.getElementById("myDeckCount").textContent = "0";
+    document.getElementById("opponentDeckCount").textContent = "0";
   }
 </script>
 </body>
