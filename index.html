@@ -3,18 +3,34 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ver:17 (オートドロー実装)</title>
+<title>ver:18 (バトルフィールド実装)</title>
 <style>
   body { margin: 0; padding: 16px; font-family: sans-serif; background: #f0f0f0; }
-  .status { margin-bottom: 8px; font-size: 15px; }
+  .status { margin-bottom: 8px; font-size: 14px; }
   #setup-area { background: #fff; padding: 20px; border-radius: 12px; margin-bottom: 15px; border: 2px solid #34c759; text-align: center; }
   button { width: 100%; height: 52px; font-size: 18px; border: none; border-radius: 8px; background: #007aff; color: white; margin-bottom: 12px; cursor: pointer; font-weight: bold; }
   button:disabled { background: #aaa; cursor: not-allowed; }
-  .turn-end-btn { background: #ff9500; }
-  .reset-btn { background: #ff3b30; margin-top: 20px; font-size: 12px; height: 35px; }
+  
+  /* フィールド（場）のスタイル */
+  .field-container { 
+    display: flex; flex-direction: column; gap: 10px; background: #ddd; 
+    padding: 10px; border-radius: 8px; margin: 15px 0; min-height: 200px;
+    border: 2px dashed #999;
+  }
+  .field-side { display: flex; gap: 8px; justify-content: center; min-height: 80px; align-items: center; }
+  .field-label { font-size: 12px; color: #666; width: 100%; text-align: center; }
+
+  /* カード共通スタイル */
+  .card { 
+    width: calc(50% - 4px); background: white; border-radius: 8px; padding: 12px; 
+    text-align: center; font-size: 14px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); 
+    box-sizing: border-box; cursor: pointer;
+  }
+  .field-card { width: 70px; height: 100px; font-size: 12px; display: flex; align-items: center; justify-content: center; }
+  
   .hand { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
-  .card { width: calc(50% - 4px); background: white; border-radius: 8px; padding: 12px; text-align: center; font-size: 16px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); box-sizing: border-box; }
-  .active-turn { color: #007aff; font-weight: bold; border: 2px solid #007aff; padding: 4px 8px; border-radius: 5px; background: #e6f0ff; }
+  .active-turn { color: #007aff; font-weight: bold; border: 2px solid #007aff; padding: 4px; border-radius: 5px; background: #e6f0ff; }
+  .reset-btn { background: #ff3b30; margin-top: 20px; font-size: 12px; height: 35px; }
 </style>
 </head>
 <body>
@@ -26,12 +42,20 @@
   <div class="status">ルーム：<span id="roomId"></span> / あなた：<span id="myPlayer"></span></div>
   <div class="status">状態：<span id="currentTurnOwner">待機中</span></div>
   <hr>
-  <div class="status">相手の手札：<b id="opponentHandCount">0</b> 枚 / 相手の山札：<b id="opponentDeckCount">0</b> 枚</div>
-  <div class="status">自分の山札：<b id="myDeckCount">0</b> 枚</div>
+  
+  <div class="field-container">
+    <div class="field-label">相手の場</div>
+    <div id="opponentField" class="field-side"></div>
+    <div style="border-top: 1px solid #bbb;"></div>
+    <div id="myField" class="field-side"></div>
+    <div class="field-label">自分の場</div>
+  </div>
 
-  <button id="drawBtn" onclick="drawCard()" disabled>カードを引く</button>
-  <button id="turnEndBtn" class="turn-end-btn" onclick="endTurn()" disabled>ターン終了</button>
+  <div class="status">相手の手札：<b id="opponentHandCount">0</b> / 山札：<b id="opponentDeckCount">0</b></div>
+  <div class="status">自分の山札：<b id="myDeckCount">0</b></div>
 
+  <button id="turnEndBtn" class="turn-end-btn" onclick="endTurn()" style="background:#ff9500" disabled>ターン終了</button>
+  
   <div id="hand" class="hand"></div>
   <button class="reset-btn" onclick="resetGame()">強制リセット</button>
 
@@ -61,79 +85,72 @@
   const p1Cards = ["火の精霊", "水の精霊", "風の精霊", "地の精霊", "光の騎士", "闇の魔導師", "雷神", "氷鬼", "戦乙女", "大盾兵"];
   const p2Cards = ["スライム", "ドラゴン", "ゴブリン", "ナイト", "ウィザード", "僧侶", "弓使い", "ゴーレム", "不死鳥", "死神"];
 
-  let myDeck = [];
-  let myHand = [];
-  let isMyTurn = false;
-  let lastTurnId = ""; // 最後に処理したターンのIDを記録
+  let myDeck = [], myHand = [], myField = [], oppField = [], isMyTurn = false, lastTurnId = "";
 
   database.ref(`games/${roomId}`).on("value", snapshot => {
     const data = snapshot.val();
     if (!data) { resetLocalUI(); return; }
 
-    // ターンの同期
     if (data.currentTurn) {
       document.getElementById("setup-area").style.display = "none";
       isMyTurn = (data.currentTurn === myPlayerId);
       document.getElementById("currentTurnOwner").textContent = isMyTurn ? "あなたの番です" : "相手の番です";
       document.getElementById("currentTurnOwner").className = isMyTurn ? "active-turn" : "";
-      
-      document.getElementById("drawBtn").disabled = !isMyTurn;
       document.getElementById("turnEndBtn").disabled = !isMyTurn;
 
-      // --- オートドロー処理 ---
-      // 自分のターンになった、かつ、前回のターン処理と異なる場合に実行
       if (isMyTurn && lastTurnId !== data.currentTurn + "_" + (data.turnCount || 0)) {
         lastTurnId = data.currentTurn + "_" + (data.turnCount || 0);
-        // 少し遅延させると「自分のターンになった感」が出ます
-        setTimeout(() => {
-          drawCard();
-        }, 500);
+        setTimeout(() => { drawCard(); }, 500);
       }
     }
 
     myHand = (data[myPlayerId] && data[myPlayerId].handList) || [];
     myDeck = (data[myPlayerId] && data[myPlayerId].deck) || [];
+    myField = (data[myPlayerId] && data[myPlayerId].field) || [];
+    oppField = (data[opponentPlayerId] && data[opponentPlayerId].field) || [];
+
     document.getElementById("myDeckCount").textContent = myDeck.length;
+    document.getElementById("opponentHandCount").textContent = ((data[opponentPlayerId] && data[opponentPlayerId].handList) || []).length;
+    document.getElementById("opponentDeckCount").textContent = ((data[opponentPlayerId] && data[opponentPlayerId].deck) || []).length;
 
-    const oppHand = (data[opponentPlayerId] && data[opponentPlayerId].handList) || [];
-    const oppDeck = (data[opponentPlayerId] && data[opponentPlayerId].deck) || [];
-    document.getElementById("opponentHandCount").textContent = oppHand.length;
-    document.getElementById("opponentDeckCount").textContent = oppDeck.length;
-
-    updateHandUI();
+    updateUI();
   });
 
   function startGame() {
-    const deck1 = [...p1Cards].sort(() => Math.random() - 0.5);
-    const deck2 = [...p2Cards].sort(() => Math.random() - 0.5);
-    const hand1 = deck1.splice(0, 3);
-    const hand2 = deck2.splice(0, 3);
-
+    const d1 = [...p1Cards].sort(() => Math.random() - 0.5);
+    const d2 = [...p2Cards].sort(() => Math.random() - 0.5);
     database.ref(`games/${roomId}`).set({
-      currentTurn: "player1",
-      turnCount: 1, // ターン数をカウント
-      player1: { deck: deck1, handList: hand1 },
-      player2: { deck: deck2, handList: hand2 }
+      currentTurn: "player1", turnCount: 1,
+      player1: { deck: d1.splice(3), handList: d1.splice(0, 3), field: [] },
+      player2: { deck: d2.splice(3), handList: d2.splice(0, 3), field: [] }
     });
   }
 
   function drawCard() {
-    // 自分の番でない、または山札がないなら引かない
     if (!isMyTurn || myDeck.length === 0) return;
-    
-    // 現在の最新の山札と手札を再取得して計算（連続クリック対策）
-    const newDeck = [...myDeck];
-    const card = newDeck.shift();
+    const card = myDeck[0];
+    const newDeck = myDeck.slice(1);
     const newHand = [...myHand, card];
+    database.ref(`games/${roomId}/${myPlayerId}`).update({ deck: newDeck, handList: newHand });
+  }
 
-    const updates = {};
-    updates[`/${myPlayerId}/deck`] = newDeck;
-    updates[`/${myPlayerId}/handList`] = newHand;
-    database.ref(`games/${roomId}`).update(updates);
+  // カードを場に出す関数
+  function playCard(index) {
+    if (!isMyTurn) { alert("自分のターンではありません"); return; }
+    const cardName = myHand[index];
+    if (!confirm(`${cardName} を場に出しますか？`)) return;
+
+    const newHand = [...myHand];
+    newHand.splice(index, 1);
+    const newField = [...myField, cardName];
+
+    database.ref(`games/${roomId}/${myPlayerId}`).update({
+      handList: newHand,
+      field: newField
+    });
   }
 
   function endTurn() {
-    // ターンを交代し、ターンカウントを進める
     database.ref(`games/${roomId}`).transaction(data => {
       if (data) {
         data.currentTurn = opponentPlayerId;
@@ -143,34 +160,47 @@
     });
   }
 
-  function resetGame() {
-    if (confirm("リセットしますか？")) {
-      database.ref(`games/${roomId}`).set(null);
-    }
+  function resetGame() { if (confirm("リセット？")) database.ref(`games/${roomId}`).set(null); }
+
+  function updateUI() {
+    // 手札の更新
+    const handDiv = document.getElementById("hand");
+    handDiv.innerHTML = "";
+    myHand.forEach((name, i) => {
+      const c = document.createElement("div");
+      c.className = "card";
+      c.textContent = name;
+      c.onclick = () => playCard(i);
+      handDiv.appendChild(c);
+    });
+
+    // 自分の場の更新
+    const myFieldDiv = document.getElementById("myField");
+    myFieldDiv.innerHTML = "";
+    myField.forEach(name => {
+      const c = document.createElement("div");
+      c.className = "card field-card";
+      c.textContent = name;
+      myFieldDiv.appendChild(c);
+    });
+
+    // 相手の場の更新
+    const oppFieldDiv = document.getElementById("opponentField");
+    oppFieldDiv.innerHTML = "";
+    oppField.forEach(name => {
+      const c = document.createElement("div");
+      c.className = "card field-card";
+      c.style.background = "#f9f9f9";
+      c.textContent = name;
+      oppFieldDiv.appendChild(c);
+    });
   }
 
   function resetLocalUI() {
-    myHand = []; myDeck = []; isMyTurn = false; lastTurnId = "";
     document.getElementById("setup-area").style.display = "block";
-    document.getElementById("currentTurnOwner").textContent = "待機中";
-    document.getElementById("currentTurnOwner").className = "";
-    document.getElementById("opponentHandCount").textContent = "0";
-    document.getElementById("opponentDeckCount").textContent = "0";
-    document.getElementById("myDeckCount").textContent = "0";
     document.getElementById("hand").innerHTML = "";
-    document.getElementById("drawBtn").disabled = true;
-    document.getElementById("turnEndBtn").disabled = true;
-  }
-
-  function updateHandUI() {
-    const handDiv = document.getElementById("hand");
-    handDiv.innerHTML = "";
-    myHand.forEach(name => {
-      const card = document.createElement("div");
-      card.className = "card";
-      card.textContent = name;
-      handDiv.appendChild(card);
-    });
+    document.getElementById("myField").innerHTML = "";
+    document.getElementById("opponentField").innerHTML = "";
   }
 </script>
 </body>
