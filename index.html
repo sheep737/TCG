@@ -3,18 +3,16 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>TCG Master Ver.40</title>
+<title>TCG Master Ver.41</title>
 <style>
   :root { --primary: #007aff; --danger: #ff3b30; --success: #34c759; --warning: #ff9500; --dark: #1c1c1e; }
   body { margin: 0; padding: 16px; font-family: -apple-system, sans-serif; background: #f0f0f0; user-select: none; -webkit-touch-callout: none; }
   
-  /* 情報表示 */
   .info-bar { background: #333; color: white; padding: 10px; border-radius: 8px; margin-bottom: 12px; font-size: 13px; line-height: 1.6; }
   .info-bar b { color: #5ac8fa; }
   .status { margin-bottom: 8px; font-size: 14px; text-align: center; height: 45px; }
   .active-turn { color: var(--primary); font-weight: bold; border: 2px solid var(--primary); padding: 6px; border-radius: 8px; background: #e6f0ff; display: block; }
 
-  /* 画面・レイアウト */
   #editor-view, #game-view { display: none; }
   .view-card { background: #fff; padding: 20px; border-radius: 12px; border: 3px solid var(--primary); box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
   .master-list { display: flex; flex-wrap: wrap; gap: 8px; margin: 15px 0; padding: 10px; background: #eee; border-radius: 8px; justify-content: center; max-height: 300px; overflow-y: auto; }
@@ -23,14 +21,12 @@
   .field-container { display: flex; flex-direction: column; gap: 10px; background: #ddd; padding: 10px; border-radius: 8px; margin: 15px 0; min-height: 260px; border: 2px dashed #999; }
   .field-side { display: flex; gap: 8px; justify-content: center; min-height: 115px; align-items: center; }
   
-  /* カード基本デザイン */
   .card { width: 85px; height: 115px; background: white; border-radius: 6px; padding: 6px; text-align: center; font-size: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); display: flex; flex-direction: column; border: 2px solid transparent; flex-shrink: 0; box-sizing: border-box; transition: 0.2s; position: relative; cursor: pointer; }
   .card-name { font-weight: bold; height: 2.4em; overflow: hidden; line-height: 1.2; }
   .tag { font-size: 8px; padding: 1px 4px; border-radius: 3px; background: #eee; margin: 2px; display: inline-block; border: 0.5px solid #ccc; }
   .atk { color: var(--danger); font-weight: bold; font-size: 14px; margin-top: auto; }
   .atk::before { content: "ATK "; font-size: 9px; }
 
-  /* 状態アニメーション */
   .exhausted { opacity: 0.5; filter: grayscale(1); }
   .selected { border-color: var(--warning); box-shadow: 0 0 10px var(--warning); transform: translateY(-5px); }
   .targetable { border-color: var(--danger); animation: blink 0.8s infinite; }
@@ -41,12 +37,12 @@
   button { width: 100%; height: 50px; font-size: 16px; border: none; border-radius: 8px; background: var(--primary); color: white; margin-bottom: 10px; font-weight: bold; cursor: pointer; }
   #hand { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 10px; }
 
-  /* 詳細モーダル */
+  /* モーダル */
   .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); display: none; align-items: center; justify-content: center; z-index: 1000; }
-  .modal-content { background: white; width: 85%; max-width: 300px; padding: 20px; border-radius: 15px; text-align: center; box-shadow: 0 10px 25px rgba(0,0,0,0.3); }
-  .modal-name { font-size: 20px; font-weight: bold; margin-bottom: 10px; }
+  .modal-content { background: white; width: 85%; max-width: 300px; padding: 20px; border-radius: 15px; text-align: center; }
+  .modal-name { font-size: 20px; font-weight: bold; margin-bottom: 5px; }
   .modal-atk { font-size: 18px; color: var(--danger); font-weight: bold; margin-bottom: 15px; }
-  .modal-effect { font-size: 14px; color: #444; text-align: left; line-height: 1.5; background: #f9f9f9; padding: 10px; border-radius: 8px; }
+  .modal-effect { font-size: 14px; color: #444; text-align: left; background: #f9f9f9; padding: 10px; border-radius: 8px; min-height: 50px; }
 
   .end-screen { position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); color:white; display:none; flex-direction:column; align-items:center; justify-content:center; z-index:100; }
 </style>
@@ -73,8 +69,8 @@
   <div id="game-view">
     <div class="info-bar">
       <div>ROOM: <b id="displayRoomId">-</b> | <b id="displayMyName">-</b></div>
-      <div>ダメージ受: 自分 <span id="myDamage">0</span>/3 | 相手 <span id="oppDamage">0</span>/3</div>
-      <div id="oppArea">攻撃対象: <b id="displayOppName">-</b></div>
+      <div>ダメージ: 自 <span id="myDamage">0</span>/3 | 敵 <span id="oppDamage">0</span>/3</div>
+      <div id="oppArea">直接攻撃: <b id="displayOppName">-</b></div>
     </div>
     <div id="setup-area"><button onclick="startGameSync()" style="background:var(--success)">対戦開始</button></div>
     <div class="status"><span id="currentTurnOwner">待機中</span></div>
@@ -114,38 +110,33 @@
   const myPlayerId = params.get("player") || "player1";
   const opponentPlayerId = myPlayerId === "player1" ? "player2" : "player1";
 
-  // 効果テキストを追加
   const cardPool = [
-    {n:"火の精霊", a:400, t:["火"], e:"標準的なモンスター。"},
-    {n:"水の精霊", a:400, t:["水"], e:"標準的なモンスター。"},
-    {n:"光の騎士", a:700, t:["光"], e:"高い攻撃力を持つ。"},
+    {n:"火の精霊", a:400, t:["火"], e:"標準的な火のモンスター。"},
+    {n:"水の精霊", a:400, t:["水"], e:"標準的な水のモンスター。"},
+    {n:"光の騎士", a:700, t:["光"], e:"高い攻撃力を持つ聖なる騎士。"},
     {n:"雷神", a:800, t:["光"], e:"伝説の雷を操る神。"},
-    {n:"戦乙女", a:750, t:["光"], e:"戦場を舞う乙女。"},
-    {n:"大盾兵", a:300, t:["地"], e:"防御に優れた兵士。"},
-    {n:"スライム", a:100, t:["水"], e:"最弱だが侮れない。"},
-    {n:"ドラゴン", a:900, t:["火", "特殊"], e:"【生贄】出す時に場の自分1体を選択して破壊する。"},
+    {n:"戦乙女", a:750, t:["光"], e:"戦場を舞う高潔な乙女。"},
+    {n:"大盾兵", a:300, t:["地"], e:"防御に優れた頑強な兵士。"},
+    {n:"スライム", a:100, t:["水"], e:"最弱だが、時に奇跡を起こす。"},
+    {n:"ドラゴン", a:900, t:["火", "特殊"], e:"【生贄】出す時に自分の場の1体を破壊する必要がある。"},
     {n:"ゴブリン", a:200, t:["地", "仲間"], e:"【仲間】出す時、デッキに別のゴブリンがいれば場に呼ぶ。"},
-    {n:"ナイト", a:500, t:["闇"], e:"闇に染まった騎士。"},
-    {n:"不死鳥", a:1000, t:["火", "特殊"], e:"【生贄】出す時に場の自分1体を選択して破壊する。"},
-    {n:"死神", a:700, t:["闇", "即死"], e:"【即死】攻撃する時、相手の数値を無視して破壊する。"}
+    {n:"ナイト", a:500, t:["闇"], e:"闇に染まった孤独な騎士。"},
+    {n:"不死鳥", a:1000, t:["火", "特殊"], e:"【生贄】出す時に自分の場の1体を破壊する必要がある。"},
+    {n:"死神", a:700, t:["闇", "即死"], e:"【即死】攻撃時、相手の数値を無視して破壊する。"}
   ];
 
   if (roomId) { document.getElementById("game-view").style.display = "block"; initGameLogic(); }
   else { document.getElementById("editor-view").style.display = "block"; initEditorLogic(); }
 
-  // --- 長押し・モーダルロジック ---
+  // --- モーダル制御 ---
   let pressTimer;
-  function startPress(card) {
-    pressTimer = setTimeout(() => showModal(card), 500);
-  }
-  function cancelPress() { clearTimeout(pressTimer); }
-
-  function showModal(card) {
-    document.getElementById("mName").textContent = card.n;
-    document.getElementById("mAtk").textContent = "ATK: " + card.a;
-    document.getElementById("mEffect").textContent = card.e || "特殊効果なし";
+  function startPress(c) { pressTimer = setTimeout(() => {
+    document.getElementById("mName").textContent = c.n;
+    document.getElementById("mAtk").textContent = "ATK: " + c.a;
+    document.getElementById("mEffect").textContent = c.e || "効果なし";
     document.getElementById("cardModal").style.display = "flex";
-  }
+  }, 500); }
+  function cancelPress() { clearTimeout(pressTimer); }
   function closeModal() { document.getElementById("cardModal").style.display = "none"; }
 
   // --- デッキ編集 ---
@@ -172,7 +163,7 @@
     database.ref(`decks/${myPlayerId}`).set(currentDeck).then(() => alert("保存完了"));
   }
 
-  // --- 対戦コア ---
+  // --- 対戦ロジック ---
   let myHand=[], myField=[], oppField=[], isMyTurn=false, selectedIdx=null, sacrificeHandIdx=null, turnCount=0;
 
   function initGameLogic() {
@@ -184,18 +175,15 @@
       const data = snap.val();
       if (!data) { resetLocalUI(); return; }
       turnCount = data.turnCount || 0;
-      const me = data[myPlayerId] || {};
-      const opp = data[opponentPlayerId] || {};
-      if (me.damage >= 3) showEnd("敗北...");
-      else if (opp.damage >= 3) showEnd("勝利！");
+      const me = data[myPlayerId] || {}; const opp = data[opponentPlayerId] || {};
+      if (me.damage >= 3) showEnd("敗北"); else if (opp.damage >= 3) showEnd("勝利");
       document.getElementById("myDamage").textContent = me.damage || 0;
       document.getElementById("oppDamage").textContent = opp.damage || 0;
       if (data.currentTurn) {
         document.getElementById("setup-area").style.display = "none";
         isMyTurn = (data.currentTurn === myPlayerId);
         if (isMyTurn && window.lastTurnKey !== (data.currentTurn + turnCount)) {
-          window.lastTurnKey = (data.currentTurn + turnCount);
-          setTimeout(autoDraw, 600);
+          window.lastTurnKey = (data.currentTurn + turnCount); setTimeout(autoDraw, 600);
         }
       }
       myHand = me.handList || []; myField = me.field || []; oppField = opp.field || [];
@@ -204,48 +192,36 @@
   }
 
   async function startGameSync() {
-    const [mySnap, oppSnap] = await Promise.all([
-      database.ref(`decks/${myPlayerId}`).get(),
-      database.ref(`decks/${opponentPlayerId}`).get()
-    ]);
-    if (!mySnap.exists() || !oppSnap.exists()) return alert("全員のデッキ保存が必要です");
-    const myD = mySnap.val().sort(() => Math.random() - 0.5);
-    const oppD = oppSnap.val().sort(() => Math.random() - 0.5);
+    const [mS, oS] = await Promise.all([database.ref(`decks/${myPlayerId}`).get(), database.ref(`decks/${opponentPlayerId}`).get()]);
+    if (!mS.exists() || !oS.exists()) return alert("デッキ未作成");
+    const mD = mS.val().sort(() => Math.random() - 0.5); const oD = oS.val().sort(() => Math.random() - 0.5);
     database.ref(`games/${roomId}`).set({
       currentTurn: "player1", turnCount: 1,
-      [myPlayerId]: { deck: myD.slice(3), handList: myD.slice(0, 3), field: [], damage: 0 },
-      [opponentPlayerId]: { deck: oppD.slice(3), handList: oppD.slice(0, 3), field: [], damage: 0 }
+      [myPlayerId]: { deck: mD.slice(3), handList: mD.slice(0, 3), field: [], damage: 0 },
+      [opponentPlayerId]: { deck: oD.slice(3), handList: oD.slice(0, 3), field: [], damage: 0 }
     });
   }
 
   function autoDraw() {
     database.ref(`games/${roomId}/${myPlayerId}`).get().then(s => {
       const d = s.val(); if (!d || !d.deck || d.deck.length === 0) return;
-      const newDeck = [...d.deck]; const card = newDeck.shift();
-      database.ref(`games/${roomId}/${myPlayerId}`).update({ deck: newDeck, handList: [...(d.handList||[]), card] });
+      const newD = [...d.deck]; const c = newD.shift();
+      database.ref(`games/${roomId}/${myPlayerId}`).update({ deck: newD, handList: [...(d.handList||[]), c] });
     });
   }
 
-  async function playCard(i, e) {
+  async function playCard(i) {
     if (!isMyTurn) return;
     const c = myHand[i];
-    if (c.n === "不死鳥" || c.n === "ドラゴン") {
-      if (myField.length === 0) return alert("生贄が必要です");
-      sacrificeHandIdx = i; updateUI(); return;
-    }
-    if (myField.length >= 3) return alert("場はいっぱいです");
+    if ((c.n==="不死鳥" || c.n==="ドラゴン") && myField.length===0) return alert("生贄不足");
+    if ((c.n==="不死鳥" || c.n==="ドラゴン")) { sacrificeHandIdx = i; updateUI(); return; }
+    if (myField.length >= 3) return alert("場がいっぱい");
 
-    let h = [...myHand]; h.splice(i, 1);
-    let f = [...myField, {...c, hasAttacked:false}];
-
+    let h = [...myHand]; h.splice(i, 1); let f = [...myField, {...c, hasAttacked:false}];
     if (c.n === "ゴブリン") {
       const snap = await database.ref(`games/${roomId}/${myPlayerId}/deck`).get();
-      let deck = snap.val() || [];
-      const gIndex = deck.findIndex(dc => dc.n === "ゴブリン");
-      if (gIndex !== -1 && f.length < 3) {
-        f.push({...deck.splice(gIndex, 1)[0], hasAttacked: false});
-        database.ref(`games/${roomId}/${myPlayerId}/deck`).set(deck);
-      }
+      let d = snap.val() || []; const gI = d.findIndex(dc => dc.n === "ゴブリン");
+      if (gI !== -1 && f.length < 3) { f.push({...d.splice(gI, 1)[0], hasAttacked: false}); database.ref(`games/${roomId}/${myPlayerId}/deck`).set(d); }
     }
     database.ref(`games/${roomId}/${myPlayerId}`).update({ handList: h, field: f });
   }
@@ -253,22 +229,14 @@
   function completeSacrifice(fi) {
     const c = myHand[sacrificeHandIdx];
     let h = [...myHand]; h.splice(sacrificeHandIdx, 1);
-    let f = [...myField]; f.splice(fi, 1); 
-    f.push({...c, hasAttacked: false});
+    let f = [...myField]; f.splice(fi, 1); f.push({...c, hasAttacked: false});
     sacrificeHandIdx = null;
     database.ref(`games/${roomId}/${myPlayerId}`).update({ handList: h, field: f });
   }
 
-  function selectMyCard(i) {
-    if (turnCount === 1) return alert("先行1ターン目は攻撃不可");
-    if (!isMyTurn || myField[i].hasAttacked || sacrificeHandIdx !== null) return;
-    selectedIdx = (selectedIdx === i) ? null : i; updateUI();
-  }
-
-  function attackOpp(oi) {
+  function attack(oi) {
     const mc = myField[selectedIdx]; const oc = oppField[oi];
-    let mf = [...myField], of = [...oppField];
-    mf[selectedIdx].hasAttacked = true;
+    let mf = [...myField], of = [...oppField]; mf[selectedIdx].hasAttacked = true;
     if (mc.n === "死神" || mc.a > oc.a) of.splice(oi, 1);
     else if (mc.a < oc.a) mf.splice(selectedIdx, 1);
     else { mf.splice(selectedIdx, 1); of.splice(oi, 1); }
@@ -277,7 +245,6 @@
   }
 
   function directAtk() {
-    if (selectedIdx === null) return;
     database.ref(`games/${roomId}/${opponentPlayerId}/damage`).transaction(d => (d || 0) + 1);
     let f = [...myField]; f[selectedIdx].hasAttacked = true;
     database.ref(`games/${roomId}/${myPlayerId}/field`).set(f);
@@ -287,78 +254,56 @@
   function endTurn() {
     selectedIdx = null; sacrificeHandIdx = null;
     database.ref(`games/${roomId}`).transaction(d => {
-      if (d) {
-        d.currentTurn = opponentPlayerId; d.turnCount = (d.turnCount || 0) + 1;
+      if (d) { d.currentTurn = opponentPlayerId; d.turnCount = (d.turnCount || 0) + 1;
         [d.player1, d.player2].forEach(p => p && p.field && p.field.forEach(c => c.hasAttacked = false));
-      }
-      return d;
+      } return d;
     });
   }
 
   function updateUI() {
     const sEl = document.querySelector(".status span");
-    sEl.textContent = isMyTurn ? (turnCount===1 ? "先行：攻撃不可" : (sacrificeHandIdx!==null ? "生贄選択中" : "自分のターン")) : "相手のターン";
+    sEl.textContent = isMyTurn ? (turnCount===1 ? "先行：攻撃不可" : (sacrificeHandIdx!==null ? "生贄選択" : "自ターン")) : "敵ターン";
     sEl.parentElement.className = isMyTurn ? "status active-turn" : "status";
     document.getElementById("turnEndBtn").disabled = !isMyTurn;
 
-    const oa = document.getElementById("oppArea");
-    const oppNameB = oa.querySelector("b");
+    const oppN = document.getElementById("displayOppName");
     if (isMyTurn && selectedIdx !== null && oppField.length === 0) {
-      oppNameB.classList.add("direct-target"); oppNameB.onclick = directAtk;
-    } else {
-      oppNameB.classList.remove("direct-target"); oppNameB.onclick = null;
-    }
+      oppN.classList.add("direct-target"); oppN.onclick = directAtk;
+    } else { oppN.classList.remove("direct-target"); oppN.onclick = null; }
 
     const hD = document.getElementById("hand"); hD.innerHTML = "";
-    myHand.forEach((c, i) => {
-      const el = createCardEl(c); if(sacrificeHandIdx===i) el.classList.add("selected");
-      el.onclick = (e) => { e.stopPropagation(); playCard(i); };
-      hD.appendChild(el);
-    });
+    myHand.forEach((c, i) => { const el = createCardEl(c); if(sacrificeHandIdx===i) el.classList.add("selected"); el.onclick = (e) => { e.stopPropagation(); playCard(i); }; hD.appendChild(el); });
 
     const mF = document.getElementById("myField"); mF.innerHTML = "";
-    myField.forEach((c, i) => {
-      const el = createCardEl(c);
-      if (sacrificeHandIdx !== null) { el.classList.add("sacrifice-target"); el.onclick = (e) => { e.stopPropagation(); completeSacrifice(i); }; }
-      else {
-        if (c.hasAttacked) el.classList.add("exhausted");
-        if (isMyTurn && !c.hasAttacked) { el.onclick = (e) => { e.stopPropagation(); selectMyCard(i); }; if (selectedIdx === i) el.classList.add("selected"); }
-      }
+    myField.forEach((c, i) => { const el = createCardEl(c);
+      if (sacrificeHandIdx !== null) { el.classList.add("sacrifice-target"); el.onclick = () => completeSacrifice(i); }
+      else { if (c.hasAttacked) el.classList.add("exhausted"); if (isMyTurn && !c.hasAttacked) { el.onclick = (e) => { e.stopPropagation(); selectedIdx = (selectedIdx === i) ? null : i; updateUI(); }; if (selectedIdx === i) el.classList.add("selected"); } }
       mF.appendChild(el);
     });
 
     const oF = document.getElementById("opponentField"); oF.innerHTML = "";
-    oppField.forEach((c, i) => {
-      const el = createCardEl(c); if(selectedIdx !== null) { el.classList.add("targetable"); el.onclick = (e) => { e.stopPropagation(); attackOpp(i); }; }
-      oF.appendChild(el);
-    });
+    oppField.forEach((c, i) => { const el = createCardEl(c); if(selectedIdx !== null) { el.classList.add("targetable"); el.onclick = () => attack(i); } oF.appendChild(el); });
   }
 
   function createCardEl(c) {
     const d = document.createElement("div"); d.className = "card";
-    // 長押しイベント登録
+    // 長押しイベント (マウスとタッチ両対応)
     d.onmousedown = () => startPress(c); d.onmouseup = cancelPress; d.onmouseleave = cancelPress;
-    d.ontouchstart = () => startPress(c); d.ontouchend = cancelPress;
-    
+    d.ontouchstart = (e) => { startPress(c); }; d.ontouchend = cancelPress;
     const ts = (c.t || []).map(t => `<span class="tag">${t}</span>`).join("");
     d.innerHTML = `<div class="card-name">${c.n}</div><div>${ts}</div><div class="atk">${c.a}</div>`;
     return d;
   }
 
-  function resetGame() { if(confirm('全リセット？')) database.ref('games/'+roomId).set(null); }
+  function resetGame() { if(confirm('リセット？')) database.ref('games/'+roomId).set(null); }
   function resetLocalUI() {
     myHand=[]; myField=[]; oppField=[]; selectedIdx=null; sacrificeHandIdx=null; turnCount=0; isMyTurn=false;
     document.getElementById("setup-area").style.display="block"; document.getElementById("end-screen").style.display="none";
     document.getElementById("hand").innerHTML=""; document.getElementById("myField").innerHTML=""; document.getElementById("opponentField").innerHTML="";
     document.getElementById("myDamage").textContent="0"; document.getElementById("oppDamage").textContent="0";
   }
-  function cancelActions(e) {
-    if (e.target.closest('.card') || e.target.closest('#oppArea')) return;
-    selectedIdx = null; sacrificeHandIdx = null; updateUI();
-  }
-  function showEnd(m) {
-    const s = document.getElementById("end-screen"); document.getElementById("end-message").textContent = m; s.style.display = "flex";
-  }
+  function cancelActions(e) { if (e.target.closest('.card') || e.target.closest('#oppArea')) return; selectedIdx = null; sacrificeHandIdx = null; updateUI(); }
+  function showEnd(m) { const s = document.getElementById("end-screen"); document.getElementById("end-message").textContent = m; s.style.display = "flex"; }
 </script>
 </body>
 </html>
