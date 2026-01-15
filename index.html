@@ -3,11 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>TCG Master Ver.41</title>
+<title>TCG Master Ver.42</title>
 <style>
   :root { --primary: #007aff; --danger: #ff3b30; --success: #34c759; --warning: #ff9500; --dark: #1c1c1e; }
   body { margin: 0; padding: 16px; font-family: -apple-system, sans-serif; background: #f0f0f0; user-select: none; -webkit-touch-callout: none; }
   
+  /* UI構成 */
   .info-bar { background: #333; color: white; padding: 10px; border-radius: 8px; margin-bottom: 12px; font-size: 13px; line-height: 1.6; }
   .info-bar b { color: #5ac8fa; }
   .status { margin-bottom: 8px; font-size: 14px; text-align: center; height: 45px; }
@@ -21,12 +22,14 @@
   .field-container { display: flex; flex-direction: column; gap: 10px; background: #ddd; padding: 10px; border-radius: 8px; margin: 15px 0; min-height: 260px; border: 2px dashed #999; }
   .field-side { display: flex; gap: 8px; justify-content: center; min-height: 115px; align-items: center; }
   
+  /* カード描画 */
   .card { width: 85px; height: 115px; background: white; border-radius: 6px; padding: 6px; text-align: center; font-size: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); display: flex; flex-direction: column; border: 2px solid transparent; flex-shrink: 0; box-sizing: border-box; transition: 0.2s; position: relative; cursor: pointer; }
   .card-name { font-weight: bold; height: 2.4em; overflow: hidden; line-height: 1.2; }
   .tag { font-size: 8px; padding: 1px 4px; border-radius: 3px; background: #eee; margin: 2px; display: inline-block; border: 0.5px solid #ccc; }
   .atk { color: var(--danger); font-weight: bold; font-size: 14px; margin-top: auto; }
   .atk::before { content: "ATK "; font-size: 9px; }
 
+  /* 状態表示 */
   .exhausted { opacity: 0.5; filter: grayscale(1); }
   .selected { border-color: var(--warning); box-shadow: 0 0 10px var(--warning); transform: translateY(-5px); }
   .targetable { border-color: var(--danger); animation: blink 0.8s infinite; }
@@ -37,12 +40,12 @@
   button { width: 100%; height: 50px; font-size: 16px; border: none; border-radius: 8px; background: var(--primary); color: white; margin-bottom: 10px; font-weight: bold; cursor: pointer; }
   #hand { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 10px; }
 
-  /* モーダル */
+  /* 詳細モーダル */
   .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); display: none; align-items: center; justify-content: center; z-index: 1000; }
   .modal-content { background: white; width: 85%; max-width: 300px; padding: 20px; border-radius: 15px; text-align: center; }
   .modal-name { font-size: 20px; font-weight: bold; margin-bottom: 5px; }
   .modal-atk { font-size: 18px; color: var(--danger); font-weight: bold; margin-bottom: 15px; }
-  .modal-effect { font-size: 14px; color: #444; text-align: left; background: #f9f9f9; padding: 10px; border-radius: 8px; min-height: 50px; }
+  .modal-effect { font-size: 14px; color: #444; text-align: left; background: #f9f9f9; padding: 12px; border-radius: 8px; min-height: 60px; line-height: 1.4; border: 1px solid #eee; }
 
   .end-screen { position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); color:white; display:none; flex-direction:column; align-items:center; justify-content:center; z-index:100; }
 </style>
@@ -54,7 +57,7 @@
       <div class="modal-name" id="mName"></div>
       <div class="modal-atk" id="mAtk"></div>
       <div class="modal-effect" id="mEffect"></div>
-      <button onclick="closeModal()" style="margin-top:20px; height:40px; background:#8e8e93">閉じる</button>
+      <button onclick="closeModal()" style="margin-top:20px; height:45px; background:#8e8e93">閉じる</button>
     </div>
   </div>
 
@@ -68,9 +71,9 @@
 
   <div id="game-view">
     <div class="info-bar">
-      <div>ROOM: <b id="displayRoomId">-</b> | <b id="displayMyName">-</b></div>
-      <div>ダメージ: 自 <span id="myDamage">0</span>/3 | 敵 <span id="oppDamage">0</span>/3</div>
-      <div id="oppArea">直接攻撃: <b id="displayOppName">-</b></div>
+      <div>ROOM: <b id="displayRoomId">-</b> | プレイヤー: <b id="displayMyName">-</b></div>
+      <div>ダメージ受: 自分 <span id="myDamage">0</span>/3 | 相手 <span id="oppDamage">0</span>/3</div>
+      <div id="oppArea">直接攻撃ターゲット: <b id="displayOppName">-</b></div>
     </div>
     <div id="setup-area"><button onclick="startGameSync()" style="background:var(--success)">対戦開始</button></div>
     <div class="status"><span id="currentTurnOwner">待機中</span></div>
@@ -86,7 +89,7 @@
 
   <div id="end-screen" class="end-screen">
     <h1 id="end-message"></h1>
-    <button onclick="resetGame()" style="width:200px; background:var(--danger)">終了</button>
+    <button onclick="resetGame()" style="width:200px; background:var(--danger)">リセットして戻る</button>
   </div>
 
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
@@ -110,19 +113,20 @@
   const myPlayerId = params.get("player") || "player1";
   const opponentPlayerId = myPlayerId === "player1" ? "player2" : "player1";
 
+  // 効果文を完全網羅
   const cardPool = [
-    {n:"火の精霊", a:400, t:["火"], e:"標準的な火のモンスター。"},
-    {n:"水の精霊", a:400, t:["水"], e:"標準的な水のモンスター。"},
-    {n:"光の騎士", a:700, t:["光"], e:"高い攻撃力を持つ聖なる騎士。"},
+    {n:"火の精霊", a:400, t:["火"], e:"標準的な能力を持つ火の精霊。"},
+    {n:"水の精霊", a:400, t:["水"], e:"標準的な能力を持つ水の精霊。"},
+    {n:"光の騎士", a:700, t:["光"], e:"高い攻撃力を誇る聖なる騎士。"},
     {n:"雷神", a:800, t:["光"], e:"伝説の雷を操る神。"},
     {n:"戦乙女", a:750, t:["光"], e:"戦場を舞う高潔な乙女。"},
-    {n:"大盾兵", a:300, t:["地"], e:"防御に優れた頑強な兵士。"},
-    {n:"スライム", a:100, t:["水"], e:"最弱だが、時に奇跡を起こす。"},
-    {n:"ドラゴン", a:900, t:["火", "特殊"], e:"【生贄】出す時に自分の場の1体を破壊する必要がある。"},
-    {n:"ゴブリン", a:200, t:["地", "仲間"], e:"【仲間】出す時、デッキに別のゴブリンがいれば場に呼ぶ。"},
-    {n:"ナイト", a:500, t:["闇"], e:"闇に染まった孤独な騎士。"},
-    {n:"不死鳥", a:1000, t:["火", "特殊"], e:"【生贄】出す時に自分の場の1体を破壊する必要がある。"},
-    {n:"死神", a:700, t:["闇", "即死"], e:"【即死】攻撃時、相手の数値を無視して破壊する。"}
+    {n:"大盾兵", a:300, t:["地"], e:"防御力に自信がある頑強な兵士。"},
+    {n:"スライム", a:100, t:["水"], e:"最弱の魔物。しかし侮ると痛い目を見る。"},
+    {n:"ドラゴン", a:900, t:["火", "特殊"], e:"【生贄召喚】召喚時に自分の場のモンスター1体を破壊して出す強力な龍。"},
+    {n:"ゴブリン", a:200, t:["地", "仲間"], e:"【仲間】召喚時、デッキに別の「ゴブリン」がいれば、場の空きに仲間を1体呼び出す。"},
+    {n:"ナイト", a:500, t:["闇"], e:"闇に染まった剣を振るう孤独な騎士。"},
+    {n:"不死鳥", a:1000, t:["火", "特殊"], e:"【生贄召喚】召喚時に自分の場のモンスター1体を破壊して出す、伝説の霊鳥。"},
+    {n:"死神", a:700, t:["闇", "即死"], e:"【即死】攻撃する時、相手の数値を無視して、どんなモンスターでも破壊する。"}
   ];
 
   if (roomId) { document.getElementById("game-view").style.display = "block"; initGameLogic(); }
@@ -130,12 +134,14 @@
 
   // --- モーダル制御 ---
   let pressTimer;
-  function startPress(c) { pressTimer = setTimeout(() => {
-    document.getElementById("mName").textContent = c.n;
-    document.getElementById("mAtk").textContent = "ATK: " + c.a;
-    document.getElementById("mEffect").textContent = c.e || "効果なし";
-    document.getElementById("cardModal").style.display = "flex";
-  }, 500); }
+  function startPress(c) {
+    pressTimer = setTimeout(() => {
+      document.getElementById("mName").textContent = c.n;
+      document.getElementById("mAtk").textContent = "ATK: " + c.a;
+      document.getElementById("mEffect").textContent = c.e || "効果なし";
+      document.getElementById("cardModal").style.display = "flex";
+    }, 500);
+  }
   function cancelPress() { clearTimeout(pressTimer); }
   function closeModal() { document.getElementById("cardModal").style.display = "none"; }
 
@@ -160,10 +166,10 @@
     updateEditorUI();
   }
   function saveDeckToFirebase() {
-    database.ref(`decks/${myPlayerId}`).set(currentDeck).then(() => alert("保存完了"));
+    database.ref(`decks/${myPlayerId}`).set(currentDeck).then(() => alert("保存しました。対戦URLを開いてください。"));
   }
 
-  // --- 対戦ロジック ---
+  // --- ゲームロジック ---
   let myHand=[], myField=[], oppField=[], isMyTurn=false, selectedIdx=null, sacrificeHandIdx=null, turnCount=0;
 
   function initGameLogic() {
@@ -176,7 +182,7 @@
       if (!data) { resetLocalUI(); return; }
       turnCount = data.turnCount || 0;
       const me = data[myPlayerId] || {}; const opp = data[opponentPlayerId] || {};
-      if (me.damage >= 3) showEnd("敗北"); else if (opp.damage >= 3) showEnd("勝利");
+      if (me.damage >= 3) showEnd("敗北..."); else if (opp.damage >= 3) showEnd("勝利！");
       document.getElementById("myDamage").textContent = me.damage || 0;
       document.getElementById("oppDamage").textContent = opp.damage || 0;
       if (data.currentTurn) {
@@ -193,7 +199,7 @@
 
   async function startGameSync() {
     const [mS, oS] = await Promise.all([database.ref(`decks/${myPlayerId}`).get(), database.ref(`decks/${opponentPlayerId}`).get()]);
-    if (!mS.exists() || !oS.exists()) return alert("デッキ未作成");
+    if (!mS.exists() || !oS.exists()) return alert("全員のデッキ保存が必要です");
     const mD = mS.val().sort(() => Math.random() - 0.5); const oD = oS.val().sort(() => Math.random() - 0.5);
     database.ref(`games/${roomId}`).set({
       currentTurn: "player1", turnCount: 1,
@@ -213,9 +219,9 @@
   async function playCard(i) {
     if (!isMyTurn) return;
     const c = myHand[i];
-    if ((c.n==="不死鳥" || c.n==="ドラゴン") && myField.length===0) return alert("生贄不足");
+    if ((c.n==="不死鳥" || c.n==="ドラゴン") && myField.length===0) return alert("生贄となるモンスターが場にいません");
     if ((c.n==="不死鳥" || c.n==="ドラゴン")) { sacrificeHandIdx = i; updateUI(); return; }
-    if (myField.length >= 3) return alert("場がいっぱい");
+    if (myField.length >= 3) return alert("場には3枚までしか出せません");
 
     let h = [...myHand]; h.splice(i, 1); let f = [...myField, {...c, hasAttacked:false}];
     if (c.n === "ゴブリン") {
@@ -262,7 +268,7 @@
 
   function updateUI() {
     const sEl = document.querySelector(".status span");
-    sEl.textContent = isMyTurn ? (turnCount===1 ? "先行：攻撃不可" : (sacrificeHandIdx!==null ? "生贄選択" : "自ターン")) : "敵ターン";
+    sEl.textContent = isMyTurn ? (turnCount===1 ? "先行：攻撃不可" : (sacrificeHandIdx!==null ? "生贄にするモンスターを選択" : "あなたの番です")) : "相手の番です";
     sEl.parentElement.className = isMyTurn ? "status active-turn" : "status";
     document.getElementById("turnEndBtn").disabled = !isMyTurn;
 
@@ -287,15 +293,14 @@
 
   function createCardEl(c) {
     const d = document.createElement("div"); d.className = "card";
-    // 長押しイベント (マウスとタッチ両対応)
     d.onmousedown = () => startPress(c); d.onmouseup = cancelPress; d.onmouseleave = cancelPress;
-    d.ontouchstart = (e) => { startPress(c); }; d.ontouchend = cancelPress;
+    d.ontouchstart = () => startPress(c); d.ontouchend = cancelPress;
     const ts = (c.t || []).map(t => `<span class="tag">${t}</span>`).join("");
     d.innerHTML = `<div class="card-name">${c.n}</div><div>${ts}</div><div class="atk">${c.a}</div>`;
     return d;
   }
 
-  function resetGame() { if(confirm('リセット？')) database.ref('games/'+roomId).set(null); }
+  function resetGame() { if(confirm('ゲームをリセットしますか？')) database.ref('games/'+roomId).set(null); }
   function resetLocalUI() {
     myHand=[]; myField=[]; oppField=[]; selectedIdx=null; sacrificeHandIdx=null; turnCount=0; isMyTurn=false;
     document.getElementById("setup-area").style.display="block"; document.getElementById("end-screen").style.display="none";
